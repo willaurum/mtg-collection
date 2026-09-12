@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MTG Card Viewer</title>
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+        <path d="M16 1 31 16 16 31 1 16Z" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path d="M16 8 24 16 16 24 8 16Z" fill="currentColor"/>
+      </svg>
+      <div class="brand-text">
+        <h1>MTG Card Viewer</h1>
+        <p class="tagline">Every card ever printed</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <span class="status" id="status">Ready</span>
+      <button class="btn ghost" id="randomBtn">Random</button>
+      <button class="btn ghost" id="scryfallBtn" disabled>Scryfall</button>
+    </div>
+  </header>
+
+  <main class="layout">
+
+    <aside class="panel search-panel">
+      <h2 class="panel-head">Find a card</h2>
+
+      <div class="search-wrap">
+        <input id="search" type="text" placeholder="Start typing a name…" autocomplete="off" spellcheck="false">
+        <ul class="suggestions" id="suggestions" hidden></ul>
+      </div>
+      <button class="btn primary block" id="searchBtn">Search</button>
+
+      <h3 class="side-head">Recently viewed</h3>
+      <ul class="recent" id="recent"></ul>
+      <p class="empty-state" id="recentEmpty">Cards you look up will collect here.</p>
+    </aside>
+
+    <section class="panel card-panel" id="cardPanel">
+      <div class="card-grid">
+
+        <div class="art-column">
+          <div class="art-frame" id="artFrame">
+            <img id="cardArt" alt="">
+            <div class="art-placeholder" id="artPlaceholder">Drawing a card…</div>
+          </div>
+          <button class="btn ghost block" id="flipBtn" hidden>Flip card</button>
+        </div>
+
+        <div class="details">
+          <div class="title-row">
+            <h2 id="cardName">&nbsp;</h2>
+            <span class="mana" id="manaCost"></span>
+          </div>
+          <p class="typeline">
+            <span id="typeLine"></span>
+            <span class="pt" id="pt"></span>
+          </p>
+
+          <div class="rules" id="rules"></div>
+
+          <div class="meta">
+            <p class="set-line"><span class="dot" id="rarityDot"></span><span id="setLine"></span></p>
+            <p class="muted" id="artistLine"></p>
+          </div>
+
+          <div class="chips" id="priceChips"></div>
+          <div class="chips" id="legalChips"></div>
+
+          <label class="printing">
+            <span class="label">Printing</span>
+            <select id="printings" disabled></select>
+          </label>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    Card data and images from <span class="link" id="scryfallCredit">Scryfall</span> · free, no API key
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
