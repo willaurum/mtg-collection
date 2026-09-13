@@ -65,6 +65,7 @@ const state = {
   suggestTimer: null,
   suggestSeq: 0,
   cardSeq: 0,
+  loadSeq: 0,          // owns the top-bar loading indicator
   library: { entries: [], decks: [], summary: {} },  // loaded once, then patched
   entryById: new Map(),
   deckId: null,        // deck currently open in the builder
@@ -1104,6 +1105,7 @@ async function showCard(card, refreshPrintings = true) {
 
 async function load(url) {
   setBusy(true);
+  const busySeq = ++state.loadSeq;
   const seq = ++state.cardSeq;
   try {
     const card = await getJson(url);
@@ -1115,7 +1117,9 @@ async function load(url) {
       ? `  Did you mean: ${error.suggestions.slice(0, 5).join(", ")}?` : "";
     setStatus(error.message + extra, true);
   } finally {
-    if (seq === state.cardSeq) setBusy(false);
+    // showCard starts a separate printing request and advances cardSeq.  The
+    // indicator belongs to this card fetch, not that follow-up request.
+    if (busySeq === state.loadSeq) setBusy(false);
   }
 }
 
