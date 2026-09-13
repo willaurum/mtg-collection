@@ -57,7 +57,7 @@ That produces `dist\MTGCardViewer.exe`. The spec bundles `templates/` and
 | Import a list | **Import** in the rail — paste a decklist or CSV, or pick a file; preview before it writes |
 | See what you own | **Collection** in the rail; search rules text, sort by name/newest/copies/value/set, toggle unused cards, or switch between card grid and compact list |
 | Preview a collection card | Hover it, or focus it with the keyboard; click or press **Enter** to open it |
-| Back up or move your library | **Export profile** writes your cards and decks to a JSON file; **Import profile** merges one in without replacing what you already own |
+| Back up or move your library | **Export profile** writes your cards and decks to a JSON file; **Import profile** can merge one in or replace your current library with it |
 | Remove a copy | **Remove one** on the card, or the **−** badge on a collection tile |
 | Build a deck | **+** beside *Decks* in the rail — cards land in columns by type |
 | Revisit a card | Click it under **Recent** in the rail — the list survives restarts |
@@ -91,10 +91,11 @@ Scryfall payloads keyed by Scryfall id, so the second person to add Lightning
 Bolt costs no API call at all.
 
 **Export profile** contains only a user's collection and decks — never their
-password, login session, or another person's data. Importing the file adds its
-card copies and recreates its decks with fresh ids, leaving everything already
-in the destination library intact. It is deliberately a merge, not a restore
-that could erase a collection by accident.
+password, login session, or another person's data. When importing, choose
+**Add to current collection** to merge in card copies and recreate decks, or
+**Replace current collection** to delete only your current cards and decks and
+restore exactly the backup. The replace choice asks for a second confirmation;
+it never affects another user's library or the shared Scryfall cache.
 
 SQLite runs in WAL mode, so a reader never blocks the writer — which matters on
 a Pi that might lose power mid-write. Each rule (one printing per row, decks

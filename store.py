@@ -454,18 +454,21 @@ def _profile_quantity(value):
     return quantity if quantity > 0 else 0
 
 
-def import_profile(user_id, profile):
-    """Merge a profile backup into one account without replacing existing data.
+def import_profile(user_id, profile, mode="merge"):
+    """Import a profile backup, either merging it or replacing one library.
 
-    Cards are added to the collection, and each imported deck gets a fresh id.
-    This lets a backup be imported into a new account or merged safely into an
-    existing one. Broken records are skipped and counted rather than leaving a
-    half-valid deck behind.
+    Cards are added to the collection and each imported deck gets a fresh id.
+    In ``replace`` mode, only the importing user's decks and collection rows
+    are deleted first; shared cached card data and every other user's library
+    are untouched. Broken records are skipped and counted rather than leaving
+    a half-valid deck behind.
     """
     if not isinstance(profile, dict):
         raise StoreError("That file is not a profile backup.")
     if profile.get("format") != PROFILE_FORMAT or profile.get("version") != PROFILE_VERSION:
         raise StoreError("That profile is from an unsupported version of MTG Card Viewer.")
+    if mode not in ("merge", "replace"):
+        raise StoreError("Choose whether to add to or replace your collection.")
     collection = profile.get("collection")
     decks = profile.get("decks")
     if not isinstance(collection, list) or not isinstance(decks, list):
@@ -476,6 +479,9 @@ def import_profile(user_id, profile):
         "skipped_cards": 0, "skipped_deck_cards": 0,
     }
     with db.transaction() as conn:
+        if mode == "replace":
+            conn.execute("DELETE FROM decks WHERE user_id = ?", (user_id,))
+            conn.execute("DELETE FROM collection WHERE user_id = ?", (user_id,))
         for item in collection:
             card = item.get("card") if isinstance(item, dict) else None
             quantity = _profile_quantity(item.get("quantity")) if isinstance(item, dict) else 0

@@ -107,6 +107,14 @@ class MutationPatchTests(unittest.TestCase):
         self.assertEqual(copied["decks"][0]["cards"][0]["quantity"], 1)
         self.assertEqual(copied["decks"][0]["commander_id"], "bolt")
 
+        store.add_card(other_user, card("bird", "Birds of Paradise"))
+        restored = store.import_profile(other_user, profile, mode="replace")
+        restored_library = store.library(other_user)
+        self.assertEqual(restored["cards"], 2)
+        self.assertEqual([entry["id"] for entry in restored_library["entries"]], ["bolt"])
+        self.assertEqual(restored_library["entries"][0]["quantity"], 2)
+        self.assertEqual(len(restored_library["decks"]), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

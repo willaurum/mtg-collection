@@ -1191,6 +1191,39 @@ kbd {
 .command-empty { padding: 15px 10px; color: var(--faint); font-size: 12px; }
 .command-help { margin: 0; padding: 8px 12px 10px; border-top: 1px solid var(--line); color: var(--faint); font-size: 10px; text-align: center; }
 
+/* --------------------------------------------------------- profile import */
+
+.profile-import-overlay {
+  position: fixed;
+  z-index: 51;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgba(4, 8, 5, 0.72);
+  backdrop-filter: blur(3px);
+}
+
+.profile-import-dialog {
+  width: min(480px, 100%);
+  padding: 22px;
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.62);
+}
+
+.profile-import-dialog h2 { margin: 0 0 6px; font: 500 20px var(--display); }
+.profile-import-dialog > p:not(.sub) { margin: 0; color: var(--text); font-size: 13px; }
+.profile-import-dialog > .sub { margin: 5px 0 14px; }
+.profile-import-choices { display: grid; gap: 8px; margin-bottom: 14px; }
+.profile-choice { display: grid; gap: 3px; padding: 12px 13px; border: 1px solid var(--line); border-radius: var(--r); background: var(--sunken); color: var(--text); cursor: pointer; text-align: left; }
+.profile-choice:hover { border-color: var(--bronze); background: var(--elevate); }
+.profile-choice b { font: 600 12px var(--sans); }
+.profile-choice span { color: var(--dim); font-size: 11px; line-height: 1.45; }
+.profile-choice.danger b { color: var(--danger); }
+.profile-choice.danger:hover { border-color: rgba(224, 115, 106, 0.5); }
+
 /* --------------------------------------------------------- scrollbars */
 
 ::-webkit-scrollbar { width: 9px; height: 9px; }

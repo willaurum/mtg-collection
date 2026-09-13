@@ -204,9 +204,10 @@ def api_profile_export():
 @app.post("/api/profile/import")
 @auth.api_login_required
 def api_profile_import():
-    profile = (request.get_json(silent=True) or {}).get("profile")
+    payload = request.get_json(silent=True) or {}
+    profile = payload.get("profile")
     try:
-        report = store.import_profile(auth.user_id(), profile)
+        report = store.import_profile(auth.user_id(), profile, payload.get("mode", "merge"))
     except store.StoreError as exc:
         return jsonify({"error": str(exc)}), 400
     except (OSError, ValueError) as exc:

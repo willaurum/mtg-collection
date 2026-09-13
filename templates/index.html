@@ -313,6 +313,25 @@
   </section>
 </div>
 
+<div class="profile-import-overlay" id="profileImportDialog" hidden>
+  <section class="profile-import-dialog" role="dialog" aria-modal="true" aria-labelledby="profileImportTitle">
+    <h2 id="profileImportTitle">Import profile</h2>
+    <p id="profileImportSummary"></p>
+    <p class="sub">Choose how this backup should affect the current collection.</p>
+    <div class="profile-import-choices">
+      <button class="profile-choice" id="profileMergeBtn">
+        <b>Add to current collection</b>
+        <span>Add card copies and recreate the backup’s decks. Nothing you own is removed.</span>
+      </button>
+      <button class="profile-choice danger" id="profileReplaceBtn">
+        <b>Replace current collection</b>
+        <span>Delete your current cards and decks, then restore only this backup.</span>
+      </button>
+    </div>
+    <button class="btn quiet" id="profileImportCancelBtn">Cancel</button>
+  </section>
+</div>
+
 <script src="/static/app.js"></script>
 </body>
 </html>

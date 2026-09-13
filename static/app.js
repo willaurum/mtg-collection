@@ -44,6 +44,9 @@ const ui = {
   collectionListBtn: el("collectionListBtn"), collectionUnusedBtn: el("collectionUnusedBtn"),
   exportProfileBtn: el("exportProfileBtn"), importProfileBtn: el("importProfileBtn"),
   profileImportFile: el("profileImportFile"),
+  profileImportDialog: el("profileImportDialog"), profileImportSummary: el("profileImportSummary"),
+  profileMergeBtn: el("profileMergeBtn"), profileReplaceBtn: el("profileReplaceBtn"),
+  profileImportCancelBtn: el("profileImportCancelBtn"),
   deckList: el("deckList"), deckListEmpty: el("deckListEmpty"), newDeckBtn: el("newDeckBtn"),
   deckPanel: el("deckPanel"), deckName: el("deckName"), deckSummary: el("deckSummary"),
   deckGrid: el("deckGrid"), deckEmpty: el("deckEmpty"), deckFilter: el("deckFilter"),
@@ -97,6 +100,7 @@ const state = {
   unusedOnly: readPreference("mtg.collection-unused", "0") === "1",
   commandItems: [],
   commandIndex: 0,
+  pendingProfile: null,
 };
 
 ui.collectionSort.value = state.collectionSort;
@@ -652,7 +656,7 @@ function readProfileFile(file) {
   const reader = new FileReader();
   reader.onload = () => {
     try {
-      importProfile(JSON.parse(String(reader.result || "")));
+      showProfileImportDialog(JSON.parse(String(reader.result || "")));
     } catch {
       setStatus("That file is not valid JSON.", true);
     }
@@ -661,25 +665,44 @@ function readProfileFile(file) {
   reader.readAsText(file);
 }
 
-async function importProfile(profile) {
-  if (!window.confirm(
-    "Import this profile? Its cards will be added to your collection and its decks recreated. " +
-    "Nothing you already own will be replaced.")) return;
+function showProfileImportDialog(profile) {
+  const printings = Array.isArray(profile && profile.collection) ? profile.collection.length : 0;
+  const decks = Array.isArray(profile && profile.decks) ? profile.decks.length : 0;
+  state.pendingProfile = profile;
+  ui.profileImportSummary.textContent =
+    `This backup contains ${printings} printing${printings === 1 ? "" : "s"} and ` +
+    `${decks} deck${decks === 1 ? "" : "s"}.`;
+  ui.profileImportDialog.hidden = false;
+}
+
+function closeProfileImportDialog() {
+  ui.profileImportDialog.hidden = true;
+  state.pendingProfile = null;
+}
+
+async function importProfile(mode) {
+  const profile = state.pendingProfile;
+  if (!profile) return;
+  if (mode === "replace" && !window.confirm(
+    "Replace your current collection? This permanently deletes your existing cards and decks before restoring this backup.")) return;
+  ui.profileImportDialog.hidden = true;
   try {
     const data = await getJson("/api/profile/import", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ profile }),
+      body: JSON.stringify({ profile, mode }),
     });
+    state.pendingProfile = null;
     applyLibrary(data);
     const report = data.imported_profile || {};
     const skipped = (report.skipped_cards || 0) + (report.skipped_deck_cards || 0);
     setStatus(
-      `Imported ${report.cards || 0} card${report.cards === 1 ? "" : "s"} and ` +
+      `${mode === "replace" ? "Restored" : "Imported"} ${report.cards || 0} card${report.cards === 1 ? "" : "s"} and ` +
       `${report.decks || 0} deck${report.decks === 1 ? "" : "s"}.` +
       (skipped ? ` Skipped ${skipped} incomplete record${skipped === 1 ? "" : "s"}.` : ""),
     );
   } catch (error) {
+    state.pendingProfile = null;
     setStatus(error.message, true);
   }
 }
@@ -1501,6 +1524,10 @@ ui.printings.addEventListener("change", () => {
 });
 
 document.addEventListener("keydown", (event) => {
+  if (!ui.profileImportDialog.hidden) {
+    if (event.key === "Escape") { event.preventDefault(); closeProfileImportDialog(); }
+    return;
+  }
   if (!ui.commandPalette.hidden) {
     if (event.key === "Escape") { event.preventDefault(); closeCommandPalette(); return; }
     if (event.key === "ArrowDown") {
@@ -1558,6 +1585,12 @@ ui.importProfileBtn.addEventListener("click", () => ui.profileImportFile.click()
 ui.profileImportFile.addEventListener("change", (event) => {
   readProfileFile(event.target.files[0]);
   event.target.value = "";
+});
+ui.profileMergeBtn.addEventListener("click", () => importProfile("merge"));
+ui.profileReplaceBtn.addEventListener("click", () => importProfile("replace"));
+ui.profileImportCancelBtn.addEventListener("click", closeProfileImportDialog);
+ui.profileImportDialog.addEventListener("click", (event) => {
+  if (event.target === ui.profileImportDialog) closeProfileImportDialog();
 });
 ui.commandInput.addEventListener("input", () => renderCommandPalette(true));
 ui.commandPalette.addEventListener("click", (event) => {
