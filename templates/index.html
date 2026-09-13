@@ -176,6 +176,7 @@
             <option value="quantity">Most copies</option>
             <option value="value">Highest value</option>
             <option value="set">Set</option>
+            <option value="unused">Unused cards only</option>
           </select>
           <div class="view-toggle" aria-label="Collection layout">
             <button class="icon-btn active" id="collectionGridBtn" title="Card grid view"
@@ -257,11 +258,11 @@
 
       <div class="view-body deck-body">
         <div class="deck-main">
-          <section class="deck-stats" id="deckStats" aria-label="Deck statistics" hidden></section>
           <div class="deck-columns" id="deckGrid"></div>
           <p class="empty" id="deckEmpty" hidden>
             Empty deck — add cards from your collection on the right.
           </p>
+          <section class="deck-stats" id="deckStats" aria-label="Deck statistics" hidden></section>
         </div>
 
         <aside class="deck-side">

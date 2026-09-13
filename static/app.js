@@ -541,7 +541,8 @@ function renderCollection() {
   const entries = allEntries
     .filter((entry) => {
       const text = collectionSearchText(entry);
-      return terms.every((term) => text.includes(term));
+      return terms.every((term) => text.includes(term)) &&
+        (ui.collectionSort.value !== "unused" || (entry.allocated || 0) === 0);
     })
     .sort(collectionComparator(ui.collectionSort.value));
   ui.collGrid.classList.toggle("list-view", state.collectionView === "list");
@@ -551,8 +552,11 @@ function renderCollection() {
   ui.collectionListBtn.setAttribute("aria-pressed", state.collectionView === "list");
   ui.collEmpty.hidden = entries.length > 0;
   if (!entries.length) {
+    const noUnused = !allEntries.some((entry) => (entry.allocated || 0) === 0);
     ui.collEmpty.textContent = allEntries.length
-      ? "No cards match that name or rules-text search."
+      ? (ui.collectionSort.value === "unused" && noUnused
+        ? "Every card is allocated to a deck."
+        : "No cards match that name or rules-text search.")
       : "Nothing saved yet — find a card and add it to the collection, or import a list.";
   }
   ui.collGrid.innerHTML = entries.map((entry) => `

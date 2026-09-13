@@ -708,7 +708,7 @@ body.busy .progress { opacity: 1; }
   display: grid;
   grid-template-columns: minmax(215px, 1.25fr) repeat(2, minmax(130px, 0.75fr));
   gap: 0;
-  margin: 0 0 18px;
+  margin: 24px 0 18px;
   border: 1px solid var(--line);
   border-radius: var(--r);
   background: var(--sunken);
