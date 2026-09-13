@@ -40,9 +40,12 @@ const ui = {
   cardPanel: el("cardPanel"), collectionPanel: el("collectionPanel"),
   collGrid: el("collGrid"), collEmpty: el("collEmpty"), collSummary: el("collSummary"),
   collectionFilter: el("collectionFilter"),
+  collectionSort: el("collectionSort"), collectionGridBtn: el("collectionGridBtn"),
+  collectionListBtn: el("collectionListBtn"),
   deckList: el("deckList"), deckListEmpty: el("deckListEmpty"), newDeckBtn: el("newDeckBtn"),
   deckPanel: el("deckPanel"), deckName: el("deckName"), deckSummary: el("deckSummary"),
   deckGrid: el("deckGrid"), deckEmpty: el("deckEmpty"), deckFilter: el("deckFilter"),
+  deckStats: el("deckStats"),
   availList: el("availList"), availEmpty: el("availEmpty"),
   deleteDeckBtn: el("deleteDeckBtn"),
   deckLegality: el("deckLegality"), deckProblems: el("deckProblems"),
@@ -74,6 +77,10 @@ const state = {
   deleteTimer: null,
   importToken: null,   // ties a previewed import to its commit
   problems: new Map(), // card id -> Commander rule breaks in the open deck
+  collectionView: (() => {
+    try { return localStorage.getItem("mtg.collection-view") || "grid"; }
+    catch { return "grid"; }
+  })(),
 };
 
 /* ------------------------------------------------------------- helpers */
@@ -536,9 +543,12 @@ function renderCollection() {
       const text = collectionSearchText(entry);
       return terms.every((term) => text.includes(term));
     })
-    .sort((a, b) => (a.name || "").localeCompare(b.name || "") ||
-      (a.set || "").localeCompare(b.set || "") ||
-      (a.collector_number || "").localeCompare(b.collector_number || ""));
+    .sort(collectionComparator(ui.collectionSort.value));
+  ui.collGrid.classList.toggle("list-view", state.collectionView === "list");
+  ui.collectionGridBtn.classList.toggle("active", state.collectionView === "grid");
+  ui.collectionListBtn.classList.toggle("active", state.collectionView === "list");
+  ui.collectionGridBtn.setAttribute("aria-pressed", state.collectionView === "grid");
+  ui.collectionListBtn.setAttribute("aria-pressed", state.collectionView === "list");
   ui.collEmpty.hidden = entries.length > 0;
   if (!entries.length) {
     ui.collEmpty.textContent = allEntries.length
@@ -552,6 +562,27 @@ function renderCollection() {
       ${locationChips(entry)}
     </figure>`).join("");
   wireTiles(ui.collGrid, (id) => openCardById(id));
+}
+
+function cardValue(entry) {
+  return Number.parseFloat((entry.card || {}).prices?.usd) || 0;
+}
+
+function collectionComparator(sort) {
+  const byName = (a, b) => (a.name || "").localeCompare(b.name || "") ||
+    (a.set || "").localeCompare(b.set || "") ||
+    (a.collector_number || "").localeCompare(b.collector_number || "");
+  if (sort === "newest") return (a, b) => (b.added || "").localeCompare(a.added || "") || byName(a, b);
+  if (sort === "quantity") return (a, b) => b.quantity - a.quantity || byName(a, b);
+  if (sort === "value") return (a, b) => cardValue(b) - cardValue(a) || byName(a, b);
+  if (sort === "set") return (a, b) => (a.set_name || a.set || "").localeCompare(b.set_name || b.set || "") || byName(a, b);
+  return byName;
+}
+
+function setCollectionView(view) {
+  state.collectionView = view;
+  try { localStorage.setItem("mtg.collection-view", view); } catch { /* preference is optional */ }
+  renderCollection();
 }
 
 /** Shared tile behaviour: open the card, drop a copy, or jump to a deck. */
@@ -753,6 +784,7 @@ function renderDeckPanel() {
   if (document.activeElement !== ui.deckName) ui.deckName.value = deck.name;
   state.problems = deckProblems(deck);
   renderDeckSummary(deck);
+  renderDeckStats(deck);
 
   const groups = new Map(CATEGORIES.map((c) => [c.key, []]));
   deck.cards.forEach((line) => {
@@ -1146,6 +1178,66 @@ async function load(url) {
   }
 }
 
+function renderDeckStats(deck) {
+  const curve = Array(7).fill(0);
+  const colours = new Map(PIP_ORDER.map((colour) => [colour, 0]));
+  const types = new Map();
+  let lands = 0;
+  let spellCount = 0;
+  let manaTotal = 0;
+
+  deck.cards.forEach((line) => {
+    const entry = state.entryById.get(line.card_id);
+    if (!entry) return;
+    const card = entry.card || {};
+    const quantity = line.quantity;
+    const category = cardCategory(card);
+    types.set(category, (types.get(category) || 0) + quantity);
+    if (category === "land") {
+      lands += quantity;
+      return;
+    }
+    const cmc = Math.max(0, Math.floor(Number(card.cmc) || 0));
+    curve[Math.min(cmc, 6)] += quantity;
+    spellCount += quantity;
+    manaTotal += (Number(card.cmc) || 0) * quantity;
+    (card.color_identity || []).forEach((colour) =>
+      colours.set(colour, (colours.get(colour) || 0) + quantity));
+  });
+
+  if (!deck.cards.length) {
+    ui.deckStats.hidden = true;
+    return;
+  }
+  const peak = Math.max(...curve, 1);
+  const commander = deck.commander_id ? state.entryById.get(deck.commander_id) : null;
+  const identity = commander ? ((commander.card || {}).color_identity || []) : [];
+  const typeText = CATEGORIES.filter((category) => category.key !== "commander")
+    .map((category) => [category.label, types.get(category.key) || 0])
+    .filter(([, count]) => count)
+    .map(([label, count]) => `<span>${escapeHtml(label)} <b>${count}</b></span>`).join("");
+  const colourText = PIP_ORDER.filter((colour) => colours.get(colour))
+    .map((colour) => `<span class="stat-colour ${colour.toLowerCase()}">${colour} <b>${colours.get(colour)}</b></span>`).join("") ||
+    '<span class="stat-muted">No coloured spells</span>';
+
+  ui.deckStats.hidden = false;
+  ui.deckStats.innerHTML = `
+    <div class="stat-overview">
+      <span><b>${lands}</b> lands</span>
+      <span><b>${spellCount ? (manaTotal / spellCount).toFixed(2) : "—"}</b> avg. mana value</span>
+      <span><b>${identityLabel(identity)}</b> identity</span>
+    </div>
+    <div class="stat-block curve"><h3>Mana curve <small>nonlands</small></h3>
+      <div class="curve-bars">${curve.map((count, mana) => `
+        <div class="curve-bar" title="${mana === 6 ? "6+" : mana} mana: ${count}">
+          <i style="height:${count ? Math.max(12, (count / peak) * 100) : 2}%"></i>
+          <b>${count}</b><span>${mana === 6 ? "6+" : mana}</span>
+        </div>`).join("")}</div>
+    </div>
+    <div class="stat-block"><h3>Colour cards</h3><div class="stat-tags">${colourText}</div></div>
+    <div class="stat-block"><h3>Types</h3><div class="stat-tags">${typeText || '<span class="stat-muted">No cards yet</span>'}</div></div>`;
+}
+
 function search() {
   const name = ui.search.value.trim();
   if (!name) return setStatus("Type a card name first.", true);
@@ -1212,6 +1304,9 @@ ui.removeBtn.addEventListener("click", () => state.card && removeFromCollection(
 ui.viewCollectionBtn.addEventListener("click", showCollectionView);
 ui.openFolderBtn.addEventListener("click", openFolder);
 ui.collectionFilter.addEventListener("input", renderCollection);
+ui.collectionSort.addEventListener("change", renderCollection);
+ui.collectionGridBtn.addEventListener("click", () => setCollectionView("grid"));
+ui.collectionListBtn.addEventListener("click", () => setCollectionView("list"));
 
 ui.navCard.addEventListener("click", showCardView);
 ui.brandBtn.addEventListener("click", showCardView);

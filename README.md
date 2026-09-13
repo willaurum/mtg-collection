@@ -1,5 +1,7 @@
 # MTG Card Viewer
 
+python desktop_app.py --server http://100.116.99.123:8000
+
 A desktop app that looks up any Magic: The Gathering card on
 [Scryfall](https://scryfall.com/docs/api) and displays it — art, rules text,
 printings, prices, and format legality.
@@ -53,7 +55,7 @@ That produces `dist\MTGCardViewer.exe`. The spec bundles `templates/` and
 | View another printing | The **Printing** dropdown lists every printing, oldest first |
 | Save a card | **Add to collection** under the details — saves the printing you are looking at |
 | Import a list | **Import** in the rail — paste a decklist or CSV, or pick a file; preview before it writes |
-| See what you own | **Collection** in the rail; the badge shows your total |
+| See what you own | **Collection** in the rail; search rules text, sort by name/newest/copies/value/set, or switch between card grid and compact list |
 | Remove a copy | **Remove one** on the card, or the **−** badge on a collection tile |
 | Build a deck | **+** beside *Decks* in the rail — cards land in columns by type |
 | Revisit a card | Click it under **Recent** in the rail — the list survives restarts |
@@ -264,6 +266,11 @@ and the slot clears itself.
 The deck header says either **No rule breaks** or how many cards are wrong, and
 names the offences underneath. Every offending card is outlined in red with a
 red **!**, and its tooltip says why.
+
+Above the deck columns, a compact stats panel shows land count, average mana
+value, commander colour identity, a nonland mana curve, cards by colour
+identity, and type counts. It recalculates immediately whenever the deck
+changes.
 
 Three rules are enforced:
 

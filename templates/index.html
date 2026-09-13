@@ -170,6 +170,23 @@
           <input id="collectionFilter" class="mini-input collection-filter"
                  placeholder="Search name or rules text…" autocomplete="off"
                  spellcheck="false" aria-label="Search collection by name or rules text">
+          <select id="collectionSort" class="view-select" aria-label="Sort collection">
+            <option value="name">Name</option>
+            <option value="newest">Recently added</option>
+            <option value="quantity">Most copies</option>
+            <option value="value">Highest value</option>
+            <option value="set">Set</option>
+          </select>
+          <div class="view-toggle" aria-label="Collection layout">
+            <button class="icon-btn active" id="collectionGridBtn" title="Card grid view"
+                    aria-label="Card grid view" aria-pressed="true">
+              <svg class="ico"><use href="#i-grid"/></svg>
+            </button>
+            <button class="icon-btn" id="collectionListBtn" title="Compact list view"
+                    aria-label="Compact list view" aria-pressed="false">
+              <svg class="ico"><use href="#i-card"/></svg>
+            </button>
+          </div>
         </div>
       </header>
       <div class="view-body">
@@ -240,6 +257,7 @@
 
       <div class="view-body deck-body">
         <div class="deck-main">
+          <section class="deck-stats" id="deckStats" aria-label="Deck statistics" hidden></section>
           <div class="deck-columns" id="deckGrid"></div>
           <p class="empty" id="deckEmpty" hidden>
             Empty deck — add cards from your collection on the right.
