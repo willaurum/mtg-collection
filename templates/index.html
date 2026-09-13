@@ -283,14 +283,20 @@
 
         <aside class="deck-side">
           <div class="deck-side-topline"><div class="side-head">Add cards</div>
-            <select id="deckZone" class="view-select" aria-label="Add cards to">
-              <option value="main">Main deck</option>
-              <option value="maybeboard">Maybeboard</option>
-            </select>
+            <div class="deck-zone-wrap">
+              <button class="btn quiet deck-zone-btn" id="deckZoneBtn" type="button">Main deck</button>
+              <div class="deck-menu deck-zone-menu" id="deckZonePicker" hidden>
+                <button data-zone="main">Main deck</button>
+                <button data-zone="maybeboard">Maybeboard</button>
+              </div>
+            </div>
           </div>
           <div class="deck-search-row">
-            <input id="deckFilter" class="mini-input" placeholder="Filter owned cards, or search any card…"
-                   autocomplete="off" spellcheck="false">
+            <div class="deck-search-wrap">
+              <input id="deckFilter" class="mini-input" placeholder="Filter owned cards, or search any card…"
+                     autocomplete="off" spellcheck="false">
+              <ul class="deck-suggestions" id="deckSuggestions" hidden></ul>
+            </div>
             <button class="btn quiet" id="deckSearchBtn" type="button">Find card</button>
           </div>
           <ul class="avail-list" id="availList"></ul>
@@ -353,6 +359,7 @@
       <p class="detail-type" id="detailType"></p>
       <div class="detail-rules" id="detailRules"></div>
       <p class="detail-meta" id="detailMeta"></p>
+      <div class="detail-facts" id="detailFacts"></div>
       <div class="detail-actions" id="detailActions"></div>
     </div>
   </section>

@@ -55,7 +55,9 @@ const ui = {
   deleteDeckBtn: el("deleteDeckBtn"),
   deckLegality: el("deckLegality"), deckProblems: el("deckProblems"),
   deckMenuWrap: el("deckMenuWrap"), deckPicker: el("deckPicker"), addToDeckBtn: el("addToDeckBtn"),
-  deckZone: el("deckZone"), deckSearchBtn: el("deckSearchBtn"), proxyListBtn: el("proxyListBtn"),
+  deckZoneBtn: el("deckZoneBtn"), deckZonePicker: el("deckZonePicker"),
+  deckSearchBtn: el("deckSearchBtn"), deckSuggestions: el("deckSuggestions"),
+  proxyListBtn: el("proxyListBtn"),
   importBtn: el("importBtn"), importPanel: el("importPanel"), importText: el("importText"),
   importFile: el("importFile"), importFileBtn: el("importFileBtn"),
   previewBtn: el("previewBtn"), commitBtn: el("commitBtn"), clearImportBtn: el("clearImportBtn"),
@@ -108,6 +110,10 @@ const state = {
   commandIndex: 0,
   pendingProfile: null,
   deckSearchCard: null,
+  deckZone: "main",
+  deckSuggestionNames: [],
+  deckSuggestTimer: null,
+  deckSuggestSeq: 0,
 };
 
 ui.collectionSort.value = state.collectionSort;
@@ -300,7 +306,7 @@ function renderRules(card) {
   ui.rules.innerHTML = html || '<p class="muted">No rules text.</p>';
 }
 
-function renderChips(card) {
+function priceChipsHtml(card) {
   const prices = card.prices || {};
   const money = [
     ["usd", "USD", "$", "legal"], ["usd_foil", "FOIL", "$", "restricted"],
@@ -308,16 +314,23 @@ function renderChips(card) {
   ].filter(([key]) => prices[key])
    .map(([key, label, symbol, tone]) =>
      `<span class="chip ${tone}">${label}<span class="v">${symbol}${escapeHtml(prices[key])}</span></span>`);
-  ui.priceChips.innerHTML = money.length
+  return money.length
     ? money.join("")
     : '<span class="chip not_legal">No price data</span>';
+}
 
+function legalityChipsHtml(card) {
   const legalities = card.legalities || {};
-  ui.legalChips.innerHTML = FORMATS.map((fmt) => {
+  return FORMATS.map((fmt) => {
     const status = legalities[fmt] || "not_legal";
     const label = fmt.charAt(0).toUpperCase() + fmt.slice(1);
     return `<span class="chip ${status}">${label}</span>`;
   }).join("");
+}
+
+function renderChips(card) {
+  ui.priceChips.innerHTML = priceChipsHtml(card);
+  ui.legalChips.innerHTML = legalityChipsHtml(card);
 }
 
 function renderArt(card) {
@@ -423,6 +436,47 @@ function applyLibrary(data) {
   renderOwned();
   if (!ui.collectionPanel.hidden) renderCollection();
   if (!ui.deckPanel.hidden) renderDeckPanel();
+}
+
+function hideDeckSuggestions() {
+  ui.deckSuggestions.hidden = true;
+  ui.deckSuggestions.innerHTML = "";
+  state.deckSuggestionNames = [];
+}
+
+function chooseDeckSuggestion(name) {
+  ui.deckFilter.value = name;
+  hideDeckSuggestions();
+  searchDeckCard();
+}
+
+function showDeckSuggestions(names) {
+  if (!names.length) return hideDeckSuggestions();
+  state.deckSuggestionNames = names;
+  ui.deckSuggestions.innerHTML = names.map((name) =>
+    `<li data-name="${escapeHtml(name)}">${escapeHtml(name)}</li>`).join("");
+  ui.deckSuggestions.querySelectorAll("li").forEach((item) => {
+    item.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+      chooseDeckSuggestion(item.dataset.name);
+    });
+  });
+  ui.deckSuggestions.hidden = false;
+}
+
+function scheduleDeckSuggest() {
+  clearTimeout(state.deckSuggestTimer);
+  const query = ui.deckFilter.value.trim();
+  if (query.length < 2) return hideDeckSuggestions();
+  state.deckSuggestTimer = setTimeout(async () => {
+    const seq = ++state.deckSuggestSeq;
+    try {
+      const names = await getJson(`/api/autocomplete?q=${encodeURIComponent(query)}`);
+      if (seq === state.deckSuggestSeq && ui.deckFilter.value.trim() === query) {
+        showDeckSuggestions(names);
+      }
+    } catch { /* deck suggestions are optional */ }
+  }, SUGGEST_DELAY);
 }
 
 /** Merge the small, server-authoritative response from one mutation. */
@@ -724,15 +778,15 @@ function setCollectionSort() {
   renderCollection();
 }
 
-function showCardPreview(cardId, anchor) {
-  const entry = state.entryById.get(cardId);
-  if (!entry) return;
-  const card = entry.card || {};
+function showCardPreview(cardOrId, anchor) {
+  const entry = typeof cardOrId === "string" ? state.entryById.get(cardOrId) : null;
+  const card = entry ? (entry.card || {}) : (cardOrId || {});
+  if (!Object.keys(card).length) return;
   const text = frontFace(card).oracle_text || card.oracle_text || "No rules text.";
   const art = imageUrl(card, 0);
   ui.previewArt.src = art ? `/img?u=${encodeURIComponent(art)}` : "";
-  ui.previewArt.alt = entry.name || "";
-  ui.previewName.textContent = entry.name || "Unknown card";
+  ui.previewArt.alt = (entry && entry.name) || card.name || "";
+  ui.previewName.textContent = (entry && entry.name) || card.name || "Unknown card";
   ui.previewType.textContent = frontFace(card).type_line || card.type_line || "";
   ui.previewText.textContent = text.length > 220 ? text.slice(0, 217) + "…" : text;
   ui.cardPreview.hidden = false;
@@ -765,7 +819,29 @@ function lineName(line) {
 function closeCardDetail() {
   ui.cardDetailDialog.hidden = true;
   ui.detailArt.removeAttribute("src");
+  ui.detailFacts.innerHTML = "";
   ui.detailActions.innerHTML = "";
+}
+
+function detailFactsHtml(card, shown) {
+  const title = (text) => String(text || "").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const identity = (card.color_identity || []).join(" ") || "Colourless";
+  const set = [card.set_name, card.set && String(card.set).toUpperCase()]
+    .filter(Boolean).join(" · ");
+  const printing = [set, card.collector_number && `#${card.collector_number}`]
+    .filter(Boolean).join(" ");
+  const facts = [
+    ["Mana cost", shown.mana_cost ? manaHtml(shown.mana_cost, true) : "—"],
+    ["Mana value", Number.isFinite(Number(card.cmc)) ? Number(card.cmc) : "—"],
+    ["Identity", escapeHtml(identity)],
+    ["Rarity", escapeHtml(title(card.rarity || "Unknown"))],
+    ["Printing", escapeHtml(printing || "Unknown")],
+    ["Artist", escapeHtml(card.artist || "Unknown")],
+  ];
+  return `<div class="detail-fact-grid">${facts.map(([label, value]) =>
+    `<div><span>${label}</span><b>${value}</b></div>`).join("")}</div>
+    <section class="detail-info-section"><h3>Prices</h3><div class="chips">${priceChipsHtml(card)}</div></section>
+    <section class="detail-info-section"><h3>Format legality</h3><div class="chips">${legalityChipsHtml(card)}</div></section>`;
 }
 
 function detailBase(card, kicker, meta) {
@@ -777,6 +853,7 @@ function detailBase(card, kicker, meta) {
   ui.detailRules.innerHTML = (shown.oracle_text || card.oracle_text || "No rules text.")
     .split("\n").filter(Boolean).map((line) => `<p>${withInlinePips(line)}</p>`).join("");
   ui.detailMeta.textContent = meta || "";
+  ui.detailFacts.innerHTML = detailFactsHtml(card, shown);
   ui.detailArt.src = art ? `/img?u=${encodeURIComponent(art)}` : "";
   ui.detailArt.alt = card.name || "";
   ui.cardDetailDialog.hidden = false;
@@ -1149,6 +1226,12 @@ function steppersHtml(line) {
 
 function wireDeckCards() {
   ui.deckGrid.querySelectorAll(".stack-card").forEach((node) => {
+    const deck = deckById(state.deckId);
+    const line = deck && deck.cards.find((item) => item.card_id === node.dataset.id);
+    if (line) {
+      node.addEventListener("mouseenter", () => showCardPreview(lineCard(line), node));
+      node.addEventListener("mouseleave", hideCardPreview);
+    }
     node.addEventListener("click", (event) => {
       if (event.target.dataset.step || event.target.dataset.cmd) return;
       openDeckDetail(state.deckId, node.dataset.id);
@@ -1176,7 +1259,7 @@ function wireDeckCards() {
 
 function renderAvailable() {
   const filter = ui.deckFilter.value.trim().toLowerCase();
-  const zone = ui.deckZone.value;
+  const zone = state.deckZone;
   const free = (state.library.entries || [])
     .filter((e) => zone === "maybeboard" || e.available > 0)
     .filter((e) => !filter || (e.name || "").toLowerCase().includes(filter))
@@ -1238,6 +1321,7 @@ function renderAvailable() {
 async function searchDeckCard() {
   const name = ui.deckFilter.value.trim();
   if (!name) return;
+  hideDeckSuggestions();
   try {
     const card = await getJson(`/api/card?name=${encodeURIComponent(name)}`);
     state.deckSearchCard = card;
@@ -1245,8 +1329,21 @@ async function searchDeckCard() {
   } catch (error) {
     state.deckSearchCard = null;
     renderAvailable();
-    setStatus(error.message, true);
+    if (error.suggestions && error.suggestions.length) {
+      showDeckSuggestions(error.suggestions);
+      setStatus("Choose the card you mean from the matches.", true);
+    } else {
+      setStatus(error.message, true);
+    }
   }
+}
+
+function setDeckZone(zone) {
+  if (!(["main", "maybeboard"].includes(zone))) return;
+  state.deckZone = zone;
+  ui.deckZoneBtn.textContent = zone === "main" ? "Main deck" : "Maybeboard";
+  ui.deckZonePicker.hidden = true;
+  renderAvailable();
 }
 
 async function newDeck() {
@@ -1760,12 +1857,19 @@ ui.proxyListBtn.addEventListener("click", openProxyList);
 ui.deckFilter.addEventListener("input", () => {
   state.deckSearchCard = null;
   renderAvailable();
+  scheduleDeckSuggest();
 });
 ui.deckFilter.addEventListener("keydown", (event) => {
   if (event.key === "Enter") { event.preventDefault(); searchDeckCard(); }
+  if (event.key === "Escape") hideDeckSuggestions();
 });
 ui.deckSearchBtn.addEventListener("click", searchDeckCard);
-ui.deckZone.addEventListener("change", renderAvailable);
+ui.deckZoneBtn.addEventListener("click", () => {
+  ui.deckZonePicker.hidden = !ui.deckZonePicker.hidden;
+});
+ui.deckZonePicker.querySelectorAll("[data-zone]").forEach((button) => {
+  button.addEventListener("click", () => setDeckZone(button.dataset.zone));
+});
 ui.detailCloseBtn.addEventListener("click", closeCardDetail);
 ui.cardDetailDialog.addEventListener("click", (event) => {
   if (event.target === ui.cardDetailDialog) closeCardDetail();
