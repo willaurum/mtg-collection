@@ -55,7 +55,7 @@ const ui = {
   deleteDeckBtn: el("deleteDeckBtn"),
   deckLegality: el("deckLegality"), deckProblems: el("deckProblems"),
   deckMenuWrap: el("deckMenuWrap"), deckPicker: el("deckPicker"), addToDeckBtn: el("addToDeckBtn"),
-  deckZone: el("deckZone"), proxyListBtn: el("proxyListBtn"),
+  deckZone: el("deckZone"), deckSearchBtn: el("deckSearchBtn"), proxyListBtn: el("proxyListBtn"),
   importBtn: el("importBtn"), importPanel: el("importPanel"), importText: el("importText"),
   importFile: el("importFile"), importFileBtn: el("importFileBtn"),
   previewBtn: el("previewBtn"), commitBtn: el("commitBtn"), clearImportBtn: el("clearImportBtn"),
@@ -1182,8 +1182,9 @@ function renderAvailable() {
     .filter((e) => !filter || (e.name || "").toLowerCase().includes(filter))
     .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
-  const searched = state.deckSearchCard && filter &&
-    (state.deckSearchCard.name || "").toLowerCase() === filter ? state.deckSearchCard : null;
+  // Keep Scryfall's match visible even when it normalises the spelling or
+  // resolves a partial name to the card's full name.
+  const searched = state.deckSearchCard && filter ? state.deckSearchCard : null;
   ui.availEmpty.hidden = free.length > 0 || Boolean(searched);
   ui.availEmpty.textContent = filter && !free.length
     ? "Nothing free matches that."
@@ -1763,6 +1764,7 @@ ui.deckFilter.addEventListener("input", () => {
 ui.deckFilter.addEventListener("keydown", (event) => {
   if (event.key === "Enter") { event.preventDefault(); searchDeckCard(); }
 });
+ui.deckSearchBtn.addEventListener("click", searchDeckCard);
 ui.deckZone.addEventListener("change", renderAvailable);
 ui.detailCloseBtn.addEventListener("click", closeCardDetail);
 ui.cardDetailDialog.addEventListener("click", (event) => {

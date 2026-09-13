@@ -877,6 +877,9 @@ kbd {
 .deck-side-topline { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .deck-side-topline .side-head { margin-bottom: 9px; }
 .deck-side-topline .view-select { width: auto; min-width: 112px; margin: -4px 0 5px; font-size: 10.5px; }
+.deck-search-row { display: flex; gap: 6px; align-items: center; }
+.deck-search-row .mini-input { min-width: 0; flex: 1; }
+.deck-search-row .btn { flex: 0 0 auto; padding: 7px 8px; font-size: 10px; white-space: nowrap; }
 .proxy-count { color: #f4e2be !important; border: 1px solid rgba(214, 180, 117, .42); background: rgba(214, 180, 117, .13) !important; }
 
 .deck-main { overflow: auto; min-height: 0; padding: 20px 0 24px 26px; }

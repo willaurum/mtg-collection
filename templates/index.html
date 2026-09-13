@@ -288,8 +288,11 @@
               <option value="maybeboard">Maybeboard</option>
             </select>
           </div>
-          <input id="deckFilter" class="mini-input" placeholder="Filter owned cards, or search any card…"
-                 autocomplete="off" spellcheck="false">
+          <div class="deck-search-row">
+            <input id="deckFilter" class="mini-input" placeholder="Filter owned cards, or search any card…"
+                   autocomplete="off" spellcheck="false">
+            <button class="btn quiet" id="deckSearchBtn" type="button">Find card</button>
+          </div>
           <ul class="avail-list" id="availList"></ul>
           <p class="empty" id="availEmpty" hidden>
             Every copy you own is already in a deck.
