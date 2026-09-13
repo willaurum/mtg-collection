@@ -646,9 +646,7 @@ kbd {
 .card-preview {
   position: fixed;
   z-index: 30;
-  display: grid;
-  grid-template-columns: 92px minmax(0, 1fr);
-  width: 264px;
+  width: 300px;
   overflow: hidden;
   pointer-events: none;
   border: 1px solid var(--line-2);
@@ -658,17 +656,18 @@ kbd {
 }
 
 .card-preview img {
-  width: 92px;
-  height: 128px;
+  display: block;
+  width: 100%;
+  aspect-ratio: 488 / 680;
   object-fit: cover;
   background: var(--sunken);
 }
 
-.preview-copy { min-width: 0; padding: 9px 10px; }
-.preview-copy h2 { overflow: hidden; margin: 0 0 3px; color: var(--text); font: 500 13px/1.2 var(--display); text-overflow: ellipsis; white-space: nowrap; }
-.preview-copy p { margin: 0; color: var(--dim); font-size: 10px; line-height: 1.4; }
+.preview-copy { min-width: 0; padding: 10px 12px 12px; }
+.preview-copy h2 { overflow: hidden; margin: 0 0 3px; color: var(--text); font: 500 15px/1.2 var(--display); text-overflow: ellipsis; white-space: nowrap; }
+.preview-copy p { margin: 0; color: var(--dim); font-size: 11px; line-height: 1.45; }
 .preview-copy #previewType { margin-bottom: 7px; color: var(--gold); }
-.preview-copy #previewText { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 5; }
+.preview-copy #previewText { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
 
 .coll-card { margin: 0; cursor: pointer; }
 

@@ -639,7 +639,7 @@ function showCardPreview(cardId, anchor) {
 
   const rect = anchor.getBoundingClientRect();
   const width = ui.cardPreview.offsetWidth || 256;
-  const height = ui.cardPreview.offsetHeight || 340;
+  const height = ui.cardPreview.offsetHeight || 520;
   const left = rect.left > window.innerWidth * 0.57
     ? Math.max(12, rect.left - width - 14)
     : Math.min(window.innerWidth - width - 12, rect.right + 14);
