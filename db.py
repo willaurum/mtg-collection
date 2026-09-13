@@ -17,7 +17,7 @@ import sqlite3
 import sys
 import threading
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA = """
 CREATE TABLE users (
@@ -169,6 +169,18 @@ def migrate(conn=None):
         return current
     if current == 0:
         conn.executescript(SCHEMA)
+        current = 1
+    if current < 2:
+        # A card can be a normal owned copy or a proxy, and can live in the
+        # main deck or the maybeboard. Defaults retain every existing deck.
+        conn.execute(
+            "ALTER TABLE deck_cards ADD COLUMN zone TEXT NOT NULL DEFAULT 'main' "
+            "CHECK (zone IN ('main', 'maybeboard'))"
+        )
+        conn.execute(
+            "ALTER TABLE deck_cards ADD COLUMN proxy INTEGER NOT NULL DEFAULT 0 "
+            "CHECK (proxy IN (0, 1))"
+        )
     # Later versions add their steps here, guarded by `current < N`.
     conn.execute(
         "INSERT INTO meta (key, value) VALUES ('schema_version', ?) "

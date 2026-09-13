@@ -54,7 +54,8 @@ const ui = {
   availList: el("availList"), availEmpty: el("availEmpty"),
   deleteDeckBtn: el("deleteDeckBtn"),
   deckLegality: el("deckLegality"), deckProblems: el("deckProblems"),
-  deckPicker: el("deckPicker"), addToDeckBtn: el("addToDeckBtn"),
+  deckMenuWrap: el("deckMenuWrap"), deckPicker: el("deckPicker"), addToDeckBtn: el("addToDeckBtn"),
+  deckZone: el("deckZone"), proxyListBtn: el("proxyListBtn"),
   importBtn: el("importBtn"), importPanel: el("importPanel"), importText: el("importText"),
   importFile: el("importFile"), importFileBtn: el("importFileBtn"),
   previewBtn: el("previewBtn"), commitBtn: el("commitBtn"), clearImportBtn: el("clearImportBtn"),
@@ -66,6 +67,12 @@ const ui = {
   previewName: el("previewName"), previewType: el("previewType"), previewText: el("previewText"),
   commandPalette: el("commandPalette"), commandInput: el("commandInput"),
   commandList: el("commandList"),
+  cardDetailDialog: el("cardDetailDialog"), detailCloseBtn: el("detailCloseBtn"),
+  detailArt: el("detailArt"), detailKicker: el("detailKicker"), detailName: el("detailName"),
+  detailType: el("detailType"), detailRules: el("detailRules"), detailMeta: el("detailMeta"),
+  detailActions: el("detailActions"),
+  proxyDialog: el("proxyDialog"), proxyCloseBtn: el("proxyCloseBtn"),
+  proxyList: el("proxyList"), proxyEmpty: el("proxyEmpty"),
 };
 
 function readPreference(key, fallback) {
@@ -91,7 +98,6 @@ const state = {
   library: { entries: [], decks: [], summary: {} },  // loaded once, then patched
   entryById: new Map(),
   deckId: null,        // deck currently open in the builder
-  pickerDeck: null,    // "add to deck" choice on the card view
   deleteTimer: null,
   importToken: null,   // ties a previewed import to its commit
   problems: new Map(), // card id -> Commander rule breaks in the open deck
@@ -101,6 +107,7 @@ const state = {
   commandItems: [],
   commandIndex: 0,
   pendingProfile: null,
+  deckSearchCard: null,
 };
 
 ui.collectionSort.value = state.collectionSort;
@@ -497,17 +504,16 @@ function renderOwned() {
       `${held} in collection — ${entry.available} free` + (where ? ` · ${where}` : "");
   }
 
-  const canDeck = held > 0 && decks.length > 0;
-  ui.deckPicker.hidden = !canDeck;
-  ui.addToDeckBtn.hidden = !canDeck;
+  const canDeck = Boolean(state.card) && decks.length > 0;
+  ui.deckMenuWrap.hidden = !canDeck;
   if (canDeck) {
-    const keep = state.pickerDeck;
-    ui.deckPicker.innerHTML = decks
-      .map((d) => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)}</option>`).join("");
-    if (keep && decks.some((d) => d.id === keep)) ui.deckPicker.value = keep;
-    state.pickerDeck = ui.deckPicker.value;
-    ui.addToDeckBtn.disabled = entry.available === 0;
-    ui.addToDeckBtn.textContent = entry.available === 0 ? "No free copies" : "Add to deck";
+    ui.addToDeckBtn.textContent = held ? "Add to deck" : "Add proxy to deck";
+    ui.deckPicker.innerHTML = decks.map((deck) => `
+      <button data-deck="${escapeHtml(deck.id)}">${escapeHtml(deck.name)}
+        <small>${deck.count} main</small></button>`).join("");
+    ui.deckPicker.querySelectorAll("[data-deck]").forEach((button) => {
+      button.addEventListener("click", () => addCurrentToDeck(button.dataset.deck));
+    });
   }
 }
 
@@ -520,9 +526,14 @@ const removeFromCollection = (cardId) => mutate(
   (d) => (d.entry ? `Removed one copy — ${d.entry.quantity} left.`
                   : "Removed from the collection."));
 
-const addCurrentToDeck = () => state.card && mutate(
-  "/api/decks/add", { deck_id: ui.deckPicker.value, card_id: state.card.id },
-  () => `Added ${state.card.name} to ${deckName(ui.deckPicker.value)}.`);
+function addCurrentToDeck(deckId) {
+  if (!state.card || !deckId) return;
+  ui.deckPicker.hidden = true;
+  mutate("/api/decks/add", { deck_id: deckId, card_id: state.card.id, card: state.card },
+    (data) => data.proxy_added
+      ? `Proxy added to ${deckName(deckId)}.`
+      : `Added ${state.card.name} to ${deckName(deckId)}.`);
+}
 
 /* ------------------------------------------------------ the collection */
 
@@ -742,6 +753,97 @@ function hideCardPreview() {
   ui.previewArt.removeAttribute("src");
 }
 
+function lineCard(line) {
+  return (state.entryById.get(line.card_id) || {}).card || line.card || {};
+}
+
+function lineName(line) {
+  const entry = state.entryById.get(line.card_id);
+  return (entry && entry.name) || lineCard(line).name || line.card_id;
+}
+
+function closeCardDetail() {
+  ui.cardDetailDialog.hidden = true;
+  ui.detailArt.removeAttribute("src");
+  ui.detailActions.innerHTML = "";
+}
+
+function detailBase(card, kicker, meta) {
+  const shown = frontFace(card);
+  const art = imageUrl(card, 0);
+  ui.detailKicker.textContent = kicker;
+  ui.detailName.textContent = shown.name || card.name || "Unknown card";
+  ui.detailType.textContent = shown.type_line || card.type_line || "";
+  ui.detailRules.innerHTML = (shown.oracle_text || card.oracle_text || "No rules text.")
+    .split("\n").filter(Boolean).map((line) => `<p>${withInlinePips(line)}</p>`).join("");
+  ui.detailMeta.textContent = meta || "";
+  ui.detailArt.src = art ? `/img?u=${encodeURIComponent(art)}` : "";
+  ui.detailArt.alt = card.name || "";
+  ui.cardDetailDialog.hidden = false;
+}
+
+function openCollectionDetail(cardId) {
+  const entry = state.entryById.get(cardId);
+  if (!entry) return;
+  const locations = (entry.locations || []).map((line) => `${line.deck_name} ×${line.quantity}`).join(" · ");
+  detailBase(entry.card || {}, "Collection card",
+    `${entry.quantity} owned · ${entry.available} free${locations ? ` · ${locations}` : ""}`);
+  ui.detailActions.innerHTML = `<button class="btn primary" data-detail-add>Add another</button>
+    <button class="btn" data-detail-remove>Remove one</button>`;
+  ui.detailActions.querySelector("[data-detail-add]").addEventListener("click", () => {
+    mutate("/api/collection/add", { card: entry.card }, () => `Added ${entry.name}.`);
+  });
+  ui.detailActions.querySelector("[data-detail-remove]").addEventListener("click", () => {
+    removeFromCollection(cardId);
+    closeCardDetail();
+  });
+}
+
+function openDeckDetail(deckId, cardId) {
+  const deck = deckById(deckId);
+  const line = deck && deck.cards.find((item) => item.card_id === cardId);
+  if (!line) return;
+  const card = lineCard(line);
+  detailBase(card, line.proxy ? "Proxy" : "Deck card",
+    `${line.quantity} in ${line.zone === "maybeboard" ? "maybeboard" : "main deck"}`);
+  const destination = line.zone === "main" ? "maybeboard" : "main";
+  const destinationLabel = destination === "main" ? "Move to main deck" : "Move to maybeboard";
+  ui.detailActions.innerHTML = `
+    <button class="btn${line.proxy ? " primary" : ""}" data-detail-proxy>
+      ${line.proxy ? "Use owned copy" : "Mark as proxy"}</button>
+    <button class="btn" data-detail-move>${destinationLabel}</button>
+    <button class="btn quiet danger" data-detail-remove>Remove one</button>`;
+  ui.detailActions.querySelector("[data-detail-proxy]").addEventListener("click", () => {
+    mutate("/api/decks/proxy", { deck_id: deckId, card_id: cardId, proxy: !line.proxy },
+      () => !line.proxy ? "Proxy enabled." : "Using an owned copy.");
+    closeCardDetail();
+  });
+  ui.detailActions.querySelector("[data-detail-move]").addEventListener("click", () => {
+    mutate("/api/decks/move", { deck_id: deckId, card_id: cardId, zone: destination },
+      () => `Moved to ${destination === "main" ? "the main deck" : "the maybeboard"}.`);
+    closeCardDetail();
+  });
+  ui.detailActions.querySelector("[data-detail-remove]").addEventListener("click", () => {
+    mutate("/api/decks/remove", { deck_id: deckId, card_id: cardId }, () => "Removed one copy.");
+    closeCardDetail();
+  });
+}
+
+function openProxyList() {
+  const deck = deckById(state.deckId);
+  if (!deck) return;
+  const proxies = deck.cards.filter((line) => line.proxy);
+  ui.proxyList.innerHTML = proxies.map((line) => `
+    <li data-card="${escapeHtml(line.card_id)}"><span>${escapeHtml(lineName(line))}</span>
+      <small>${line.quantity} × ${line.zone === "main" ? "main" : "maybeboard"}</small></li>`).join("");
+  ui.proxyEmpty.hidden = proxies.length > 0;
+  ui.proxyList.querySelectorAll("li").forEach((item) => item.addEventListener("click", () => {
+    ui.proxyDialog.hidden = true;
+    openDeckDetail(deck.id, item.dataset.card);
+  }));
+  ui.proxyDialog.hidden = false;
+}
+
 /** Shared tile behaviour: open the card, drop a copy, or jump to a deck. */
 function wireTiles(root, onOpen) {
   root.querySelectorAll(".coll-card").forEach((node) => {
@@ -778,8 +880,7 @@ function wireTiles(root, onOpen) {
 }
 
 function openCardById(cardId) {
-  const entry = state.entryById.get(cardId);
-  if (entry && entry.card) showCard(entry.card);
+  openCollectionDetail(cardId);
 }
 
 /* ------------------------------------------------------------- decking */
@@ -812,6 +913,7 @@ const CATEGORIES = [
   { key: "battle", label: "Battles" },
   { key: "land", label: "Lands" },
   { key: "other", label: "Other" },
+  { key: "maybeboard", label: "Maybeboard" },
 ];
 
 /** A double-faced card is categorised by its front, not by "front // back". */
@@ -898,11 +1000,9 @@ function deckProblems(deck) {
   };
 
   const byName = new Map();
-  deck.cards.forEach((line) => {
-    const entry = state.entryById.get(line.card_id);
-    if (!entry) return;                       // missing cards flag themselves
-    const card = entry.card || {};
-    const name = card.name || entry.name || line.card_id;
+  deck.cards.filter((line) => line.zone === "main").forEach((line) => {
+    const card = lineCard(line);
+    const name = lineName(line);
     const seen = byName.get(name) || { total: 0, ids: [], card };
     seen.total += line.quantity;
     seen.ids.push(line.card_id);
@@ -917,19 +1017,18 @@ function deckProblems(deck) {
       note(id, `${seen.total} copies of ${name} — Commander allows ${allowed}`));
   });
 
-  const commander = deck.commander_id ? state.entryById.get(deck.commander_id) : null;
+  const commanderLine = deck.cards.find((line) => line.card_id === deck.commander_id);
+  const commander = commanderLine ? { name: lineName(commanderLine), card: lineCard(commanderLine) } : null;
   const identity = commander
     ? new Set((commander.card || {}).color_identity || []) : null;
 
-  deck.cards.forEach((line) => {
-    const entry = state.entryById.get(line.card_id);
-    if (!entry) return;
-    const card = entry.card || {};
+  deck.cards.filter((line) => line.zone === "main").forEach((line) => {
+    const card = lineCard(line);
 
     // Format legality holds whether or not a commander has been named.
     const status = (card.legalities || {}).commander;
     if (BAD_LEGALITY[status]) {
-      note(line.card_id, `${entry.name} is ${BAD_LEGALITY[status]}`);
+      note(line.card_id, `${lineName(line)} is ${BAD_LEGALITY[status]}`);
     }
 
     // Colour identity only means something once there is a commander, and the
@@ -939,7 +1038,7 @@ function deckProblems(deck) {
       .filter((colour) => !identity.has(colour));
     if (outside.length) {
       note(line.card_id,
-        `${entry.name} is ${identityLabel(outside)} — outside ` +
+        `${lineName(line)} is ${identityLabel(outside)} — outside ` +
         `${commander.name}'s ${identityLabel([...identity])} identity`);
     }
   });
@@ -954,18 +1053,22 @@ function renderDeckPanel() {
   state.problems = deckProblems(deck);
   renderDeckSummary(deck);
   renderDeckStats(deck);
+  const proxyCount = deck.cards.filter((line) => line.proxy).length;
+  ui.proxyListBtn.hidden = proxyCount === 0;
+  ui.proxyListBtn.textContent = `Proxies${proxyCount ? ` · ${proxyCount}` : ""}`;
 
   const groups = new Map(CATEGORIES.map((c) => [c.key, []]));
   deck.cards.forEach((line) => {
     const entry = state.entryById.get(line.card_id);
-    const key = line.card_id === deck.commander_id ? "commander"
-      : entry ? cardCategory(entry.card || {}) : "other";
-    groups.get(key).push({ line, entry });
+    const card = lineCard(line);
+    const key = line.zone === "maybeboard" ? "maybeboard"
+      : line.card_id === deck.commander_id ? "commander" : cardCategory(card);
+    groups.get(key).push({ line, entry, card });
   });
   groups.forEach((items) => items.sort((a, b) => {
-    const cmc = (x) => ((x.entry && x.entry.card && x.entry.card.cmc) || 0);
+    const cmc = (x) => x.card.cmc || 0;
     return cmc(a) - cmc(b)
-      || ((a.entry && a.entry.name) || "").localeCompare((b.entry && b.entry.name) || "");
+      || lineName(a.line).localeCompare(lineName(b.line));
   }));
 
   ui.deckEmpty.hidden = deck.cards.length > 0;
@@ -987,9 +1090,11 @@ function renderDeckPanel() {
 
 function renderDeckSummary(deck) {
   const unique = deck.cards.length;
-  const commander = deck.commander_id ? state.entryById.get(deck.commander_id) : null;
+  const commanderLine = deck.cards.find((line) => line.card_id === deck.commander_id);
+  const commander = commanderLine ? { name: lineName(commanderLine) } : null;
   const parts = [`${deck.count} / 100 cards`, `${unique} unique`];
   parts.push(commander ? `led by ${commander.name}` : "no commander set");
+  if (deck.maybeboard_count) parts.push(`${deck.maybeboard_count} in maybeboard`);
   ui.deckSummary.textContent = parts.join(" · ");
   ui.deckSummary.classList.toggle("ok", deck.count === 100 && Boolean(commander));
 
@@ -1007,46 +1112,38 @@ function renderDeckSummary(deck) {
     (reasons.length > 3 ? ` · +${reasons.length - 3} more` : "");
 }
 
-function stackCardHtml({ line, entry }, deck) {
+function stackCardHtml({ line, entry, card }, deck) {
   const id = escapeHtml(line.card_id);
   const isCommander = line.card_id === deck.commander_id;
 
-  if (!entry) {
-    return `
-      <div class="stack-card missing" data-id="${id}">
-        <div class="gone">Not in your collection</div>
-        <span class="qty">×${line.quantity}</span>
-        ${steppersHtml(line, true)}
-      </div>`;
-  }
-
-  const art = imageUrl(entry.card || {}, 0);
-  const lead = canBeCommander(entry.card || {});
+  const art = imageUrl(card, 0);
+  const lead = canBeCommander(card);
   const broken = state.problems.get(line.card_id) || [];
-  const tip = [entry.name, ...broken.map((reason) => "⚠ " + reason)].join("\n");
+  const tip = [lineName(line), ...broken.map((reason) => "⚠ " + reason)].join("\n");
   return `
-    <div class="stack-card${isCommander ? " is-commander" : ""}${broken.length ? " illegal" : ""}"
+    <div class="stack-card${isCommander ? " is-commander" : ""}${broken.length ? " illegal" : ""}${line.proxy ? " proxy" : ""}"
          data-id="${id}" title="${escapeHtml(tip)}">
       ${broken.length ? '<span class="warn" aria-label="Breaks a deck rule">!</span>' : ""}
       <img src="${art ? `/img?u=${encodeURIComponent(art)}` : ""}"
-           alt="${escapeHtml(entry.name)}" loading="lazy">
+           alt="${escapeHtml(lineName(line))}" loading="lazy">
+      ${line.proxy ? '<span class="proxy-mark">Proxy</span>' : ""}
       ${line.quantity > 1 ? `<span class="qty">×${line.quantity}</span>` : ""}
       ${lead ? `<button class="cmd${isCommander ? " on" : ""}" data-cmd="${id}"
          title="${isCommander ? "Not the commander" : "Make this the commander"}">★</button>` : ""}
-      ${steppersHtml(line, false)}
+      ${steppersHtml(line)}
     </div>`;
 }
 
-function steppersHtml(line, missing) {
+function steppersHtml(line) {
   const entry = state.entryById.get(line.card_id);
-  const canAdd = entry && entry.available > 0;
+  const canAdd = line.proxy || line.zone === "maybeboard" || (entry && entry.available > 0);
   return `
     <div class="steppers">
       <button data-step="down" data-card="${escapeHtml(line.card_id)}" title="Remove one">−</button>
       <span class="n" data-step="n">${line.quantity}</span>
       <button data-step="up" data-card="${escapeHtml(line.card_id)}" title="${
         canAdd ? "Add one more" : "No free copies left"}" ${
-        canAdd && !missing ? "" : "disabled"}>+</button>
+        canAdd ? "" : "disabled"}>+</button>
     </div>`;
 }
 
@@ -1054,7 +1151,7 @@ function wireDeckCards() {
   ui.deckGrid.querySelectorAll(".stack-card").forEach((node) => {
     node.addEventListener("click", (event) => {
       if (event.target.dataset.step || event.target.dataset.cmd) return;
-      openCardById(node.dataset.id);
+      openDeckDetail(state.deckId, node.dataset.id);
     });
   });
   ui.deckGrid.querySelectorAll("[data-step]").forEach((node) => {
@@ -1071,7 +1168,7 @@ function wireDeckCards() {
       const deck = deckById(state.deckId);
       const next = deck.commander_id === node.dataset.cmd ? null : node.dataset.cmd;
       mutate("/api/decks/commander", { deck_id: state.deckId, card_id: next },
-        () => (next ? `${state.entryById.get(next).name} leads the deck.`
+        () => (next ? `${lineName(deck.cards.find((line) => line.card_id === next))} leads the deck.`
                     : "Commander cleared."));
     });
   });
@@ -1079,21 +1176,32 @@ function wireDeckCards() {
 
 function renderAvailable() {
   const filter = ui.deckFilter.value.trim().toLowerCase();
+  const zone = ui.deckZone.value;
   const free = (state.library.entries || [])
-    .filter((e) => e.available > 0)
+    .filter((e) => zone === "maybeboard" || e.available > 0)
     .filter((e) => !filter || (e.name || "").toLowerCase().includes(filter))
     .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
-  ui.availEmpty.hidden = free.length > 0;
+  const searched = state.deckSearchCard && filter &&
+    (state.deckSearchCard.name || "").toLowerCase() === filter ? state.deckSearchCard : null;
+  ui.availEmpty.hidden = free.length > 0 || Boolean(searched);
   ui.availEmpty.textContent = filter && !free.length
     ? "Nothing free matches that."
     : "Every copy you own is already in a deck.";
 
   const deck = deckById(state.deckId) || {};
-  const commander = deck.commander_id ? state.entryById.get(deck.commander_id) : null;
+  const commanderLine = deck.cards && deck.cards.find((line) => line.card_id === deck.commander_id);
+  const commander = commanderLine ? { name: lineName(commanderLine), card: lineCard(commanderLine) } : null;
   const identity = commander ? new Set((commander.card || {}).color_identity || []) : null;
 
-  ui.availList.innerHTML = free.map((entry) => {
+  const searchedHtml = searched && !state.entryById.has(searched.id) ? (() => {
+    const art = imageUrl(searched, 0);
+    return `<li data-proxy="${escapeHtml(searched.id)}" title="Add a proxy to this deck">
+      <img src="${art ? `/img?u=${encodeURIComponent(art)}` : ""}" alt="" loading="lazy">
+      <span class="an"><span>${escapeHtml(searched.name)}</span><small>Not in collection · add as proxy</small></span>
+      <span class="free proxy-count">×0</span></li>`;
+  })() : "";
+  ui.availList.innerHTML = searchedHtml + free.map((entry) => {
     const art = imageUrl(entry.card || {}, 0);
     const src = art ? `/img?u=${encodeURIComponent(art)}` : "";
     // Flag a colour clash here too, so it is visible before the card goes in.
@@ -1101,7 +1209,7 @@ function renderAvailable() {
       ? ((entry.card || {}).color_identity || []).filter((c) => !identity.has(c)) : [];
     const tip = outside.length
       ? `Outside ${commander.name}'s ${identityLabel([...identity])} identity`
-      : "Add to this deck";
+      : `Add to ${zone === "main" ? "main deck" : "maybeboard"}`;
     return `
       <li data-id="${escapeHtml(entry.id)}" class="${outside.length ? "off-colour" : ""}"
           title="${escapeHtml(tip)}">
@@ -1115,9 +1223,29 @@ function renderAvailable() {
 
   [...ui.availList.children].forEach((item) => {
     item.addEventListener("click", () => {
-      mutate("/api/decks/add", { deck_id: state.deckId, card_id: item.dataset.id });
+      if (item.dataset.proxy) {
+        mutate("/api/decks/add", { deck_id: state.deckId, card: state.deckSearchCard, zone },
+          () => "Proxy added.");
+      } else {
+        mutate("/api/decks/add", { deck_id: state.deckId, card_id: item.dataset.id, zone },
+          () => `Added to ${zone === "main" ? "main deck" : "maybeboard"}.`);
+      }
     });
   });
+}
+
+async function searchDeckCard() {
+  const name = ui.deckFilter.value.trim();
+  if (!name) return;
+  try {
+    const card = await getJson(`/api/card?name=${encodeURIComponent(name)}`);
+    state.deckSearchCard = card;
+    renderAvailable();
+  } catch (error) {
+    state.deckSearchCard = null;
+    renderAvailable();
+    setStatus(error.message, true);
+  }
 }
 
 async function newDeck() {
@@ -1418,10 +1546,8 @@ function renderDeckStats(deck) {
   let spellCount = 0;
   let manaTotal = 0;
 
-  deck.cards.forEach((line) => {
-    const entry = state.entryById.get(line.card_id);
-    if (!entry) return;
-    const card = entry.card || {};
+  deck.cards.filter((line) => line.zone === "main").forEach((line) => {
+    const card = lineCard(line);
     const quantity = line.quantity;
     const category = cardCategory(card);
     types.set(category, (types.get(category) || 0) + quantity);
@@ -1442,9 +1568,9 @@ function renderDeckStats(deck) {
     return;
   }
   const peak = Math.max(...curve, 1);
-  const commander = deck.commander_id ? state.entryById.get(deck.commander_id) : null;
-  const identity = commander ? ((commander.card || {}).color_identity || []) : [];
-  const typeText = CATEGORIES.filter((category) => category.key !== "commander")
+  const commanderLine = deck.cards.find((line) => line.card_id === deck.commander_id);
+  const identity = commanderLine ? (lineCard(commanderLine).color_identity || []) : [];
+  const typeText = CATEGORIES.filter((category) => !["commander", "maybeboard"].includes(category.key))
     .map((category) => [category.label, types.get(category.key) || 0])
     .filter(([, count]) => count)
     .map(([label, count]) => `<span>${escapeHtml(label)} <b>${count}</b></span>`).join("");
@@ -1524,6 +1650,14 @@ ui.printings.addEventListener("change", () => {
 });
 
 document.addEventListener("keydown", (event) => {
+  if (!ui.cardDetailDialog.hidden) {
+    if (event.key === "Escape") { event.preventDefault(); closeCardDetail(); }
+    return;
+  }
+  if (!ui.proxyDialog.hidden) {
+    if (event.key === "Escape") { event.preventDefault(); ui.proxyDialog.hidden = true; }
+    return;
+  }
   if (!ui.profileImportDialog.hidden) {
     if (event.key === "Escape") { event.preventDefault(); closeProfileImportDialog(); }
     return;
@@ -1616,11 +1750,28 @@ ui.importText.addEventListener("input", () => {
   if (state.importToken) resetImportReport();
 });
 
-ui.deckPicker.addEventListener("change", () => { state.pickerDeck = ui.deckPicker.value; });
-ui.addToDeckBtn.addEventListener("click", addCurrentToDeck);
+ui.addToDeckBtn.addEventListener("click", () => {
+  ui.deckPicker.hidden = !ui.deckPicker.hidden;
+});
 ui.newDeckBtn.addEventListener("click", newDeck);
 ui.deleteDeckBtn.addEventListener("click", deleteDeck);
-ui.deckFilter.addEventListener("input", renderAvailable);
+ui.proxyListBtn.addEventListener("click", openProxyList);
+ui.deckFilter.addEventListener("input", () => {
+  state.deckSearchCard = null;
+  renderAvailable();
+});
+ui.deckFilter.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") { event.preventDefault(); searchDeckCard(); }
+});
+ui.deckZone.addEventListener("change", renderAvailable);
+ui.detailCloseBtn.addEventListener("click", closeCardDetail);
+ui.cardDetailDialog.addEventListener("click", (event) => {
+  if (event.target === ui.cardDetailDialog) closeCardDetail();
+});
+ui.proxyCloseBtn.addEventListener("click", () => { ui.proxyDialog.hidden = true; });
+ui.proxyDialog.addEventListener("click", (event) => {
+  if (event.target === ui.proxyDialog) ui.proxyDialog.hidden = true;
+});
 ui.deckName.addEventListener("change", renameDeck);
 ui.deckName.addEventListener("keydown", (event) => {
   if (event.key === "Enter") ui.deckName.blur();

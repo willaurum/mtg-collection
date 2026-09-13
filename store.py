@@ -22,7 +22,7 @@ import db
 MAX_NAME = 60
 DEFAULT_DECK_NAME = "New deck"
 PROFILE_FORMAT = "mtg-card-viewer-profile"
-PROFILE_VERSION = 1
+PROFILE_VERSION = 2
 
 
 class StoreError(Exception):
@@ -198,7 +198,7 @@ def deck_card_ids(user_id, deck_id, conn=None):
     _owned_deck(conn, user_id, deck_id)
     return [row["card_id"] for row in conn.execute(
         """SELECT dc.card_id FROM deck_cards dc JOIN decks d ON d.id = dc.deck_id
-             WHERE dc.deck_id = ? AND d.user_id = ?""",
+             WHERE dc.deck_id = ? AND d.user_id = ? AND dc.zone = 'main' AND dc.proxy = 0""",
         (deck_id, user_id),
     )]
 
@@ -216,7 +216,7 @@ def delete_deck(user_id, deck_id):
     with db.transaction() as conn:
         _owned_deck(conn, user_id, deck_id)
         released = [row["card_id"] for row in conn.execute(
-            "SELECT card_id FROM deck_cards WHERE deck_id = ?", (deck_id,)
+            "SELECT card_id FROM deck_cards WHERE deck_id = ? AND zone = 'main' AND proxy = 0", (deck_id,)
         )]
         conn.execute("DELETE FROM decks WHERE id = ?", (deck_id,))   # cascades
     return released
@@ -227,7 +227,7 @@ def set_commander(user_id, deck_id, card_id):
         _owned_deck(conn, user_id, deck_id)
         if card_id:
             held = conn.execute(
-                "SELECT 1 FROM deck_cards WHERE deck_id = ? AND card_id = ?",
+                "SELECT 1 FROM deck_cards WHERE deck_id = ? AND card_id = ? AND zone = 'main'",
                 (deck_id, card_id)).fetchone()
             if not held:
                 raise StoreError("Add the card to the deck before making it the commander.")
@@ -241,7 +241,7 @@ def _allocations(conn, user_id):
     rows = conn.execute(
         """SELECT dc.card_id, dc.quantity, d.id AS deck_id, d.name AS deck_name
              FROM deck_cards dc JOIN decks d ON d.id = dc.deck_id
-            WHERE d.user_id = ?
+             WHERE d.user_id = ? AND dc.zone = 'main' AND dc.proxy = 0
             ORDER BY d.name COLLATE NOCASE""",
         (user_id,),
     ).fetchall()
@@ -254,42 +254,67 @@ def _allocations(conn, user_id):
     return spread
 
 
-def deck_add(user_id, deck_id, card_id, quantity=1):
+def _zone(value):
+    if value not in ("main", "maybeboard"):
+        raise StoreError("Choose the main deck or maybeboard.")
+    return value
+
+
+def deck_add(user_id, deck_id, card_id=None, quantity=1, card=None, zone="main"):
+    """Add an owned card, or cache an unowned card as a clearly marked proxy."""
     quantity = max(1, int(quantity))
+    zone = _zone(zone)
     with db.transaction() as conn:
         _owned_deck(conn, user_id, deck_id)
+        if card:
+            card_id = remember_card(card, conn)
+        if not card_id:
+            raise StoreError("Choose a card first.")
         owned = conn.execute(
             "SELECT quantity FROM collection WHERE user_id = ? AND card_id = ?",
             (user_id, card_id)).fetchone()
-        if not owned:
+        existing = conn.execute(
+            "SELECT proxy, zone FROM deck_cards WHERE deck_id = ? AND card_id = ?",
+            (deck_id, card_id),
+        ).fetchone()
+        if existing and existing["zone"] != zone:
+            raise StoreError(
+                "This printing is already in the %s. Open it to move it instead."
+                % ("main deck" if existing["zone"] == "main" else "maybeboard")
+            )
+        # Adding another copy to an existing proxy line keeps that line a proxy.
+        # The user can deliberately switch it to an owned copy from its detail view.
+        proxy = not owned or bool(existing and existing["proxy"])
+        if proxy and not card and not (existing and existing["proxy"]):
             raise StoreError("That card is not in your collection.")
 
-        held = _allocations(conn, user_id).get(card_id, [])
-        allocated = sum(item["quantity"] for item in held)
-        free = int(owned["quantity"]) - allocated
-        if free < quantity:
-            name = conn.execute("SELECT name FROM cards WHERE id = ?",
-                                (card_id,)).fetchone()
-            where = ", ".join("%s (%d)" % (h["deck_name"], h["quantity"]) for h in held)
-            raise StoreError(
-                "You own %d %s and every spare copy is already in a deck%s."
-                % (int(owned["quantity"]), name["name"] if name else "of that card",
-                   " - " + where if where else ""))
+        if owned and zone == "main" and not proxy:
+            held = _allocations(conn, user_id).get(card_id, [])
+            allocated = sum(item["quantity"] for item in held)
+            free = int(owned["quantity"]) - allocated
+            if free < quantity:
+                name = conn.execute("SELECT name FROM cards WHERE id = ?",
+                                    (card_id,)).fetchone()
+                where = ", ".join("%s (%d)" % (h["deck_name"], h["quantity"]) for h in held)
+                raise StoreError(
+                    "You own %d %s and every spare copy is already in a deck%s."
+                    % (int(owned["quantity"]), name["name"] if name else "of that card",
+                       " - " + where if where else ""))
 
         conn.execute(
-            """INSERT INTO deck_cards (deck_id, card_id, quantity) VALUES (?, ?, ?)
+            """INSERT INTO deck_cards (deck_id, card_id, quantity, zone, proxy) VALUES (?, ?, ?, ?, ?)
                ON CONFLICT (deck_id, card_id)
                DO UPDATE SET quantity = quantity + excluded.quantity""",
-            (deck_id, card_id, quantity))
+            (deck_id, card_id, quantity, zone, 1 if proxy else 0))
         conn.execute("UPDATE decks SET updated = ? WHERE id = ?", (_now(), deck_id))
-    return deck_id
+    return {"deck_id": deck_id, "card_id": card_id, "proxy_added": proxy}
 
 
 def deck_remove(user_id, deck_id, card_id, drop_all=False):
     with db.transaction() as conn:
         deck = _owned_deck(conn, user_id, deck_id)
         row = conn.execute(
-            "SELECT quantity FROM deck_cards WHERE deck_id = ? AND card_id = ?",
+            "SELECT quantity, zone FROM deck_cards WHERE deck_id = ? AND card_id = ?",
             (deck_id, card_id)).fetchone()
         if not row:
             return deck_id
@@ -307,6 +332,63 @@ def deck_remove(user_id, deck_id, card_id, drop_all=False):
     return deck_id
 
 
+def set_proxy(user_id, deck_id, card_id, proxy):
+    """Mark a deck card as a proxy, or require an owned copy before clearing it."""
+    with db.transaction() as conn:
+        _owned_deck(conn, user_id, deck_id)
+        line = conn.execute(
+            "SELECT quantity, zone FROM deck_cards WHERE deck_id = ? AND card_id = ?",
+            (deck_id, card_id),
+        ).fetchone()
+        if not line:
+            raise StoreError("That card is no longer in the deck.")
+        proxy = bool(proxy)
+        if not proxy:
+            owned = conn.execute(
+                "SELECT quantity FROM collection WHERE user_id = ? AND card_id = ?",
+                (user_id, card_id),
+            ).fetchone()
+            if not owned:
+                raise StoreError("Add this card to your collection before clearing its proxy flag.")
+            if line["zone"] == "main":
+                allocated = sum(item["quantity"] for item in _allocations(conn, user_id).get(card_id, []))
+                if int(owned["quantity"]) - allocated < int(line["quantity"]):
+                    raise StoreError("You do not have enough free copies to use this as a non-proxy.")
+        conn.execute("UPDATE deck_cards SET proxy = ? WHERE deck_id = ? AND card_id = ?",
+                     (1 if proxy else 0, deck_id, card_id))
+        conn.execute("UPDATE decks SET updated = ? WHERE id = ?", (_now(), deck_id))
+    return deck_id
+
+
+def move_deck_card(user_id, deck_id, card_id, zone):
+    """Move one card line between the main deck and the maybeboard."""
+    zone = _zone(zone)
+    with db.transaction() as conn:
+        deck = _owned_deck(conn, user_id, deck_id)
+        line = conn.execute(
+            "SELECT quantity, proxy, zone FROM deck_cards WHERE deck_id = ? AND card_id = ?",
+            (deck_id, card_id),
+        ).fetchone()
+        if not line:
+            raise StoreError("That card is no longer in the deck.")
+        if line["zone"] == zone:
+            return deck_id
+        if zone == "main" and not line["proxy"]:
+            owned = conn.execute(
+                "SELECT quantity FROM collection WHERE user_id = ? AND card_id = ?",
+                (user_id, card_id),
+            ).fetchone()
+            allocated = sum(item["quantity"] for item in _allocations(conn, user_id).get(card_id, []))
+            if not owned or int(owned["quantity"]) - allocated < int(line["quantity"]):
+                raise StoreError("You do not have enough free copies to move this into the main deck.")
+        conn.execute("UPDATE deck_cards SET zone = ? WHERE deck_id = ? AND card_id = ?",
+                     (zone, deck_id, card_id))
+        if zone == "maybeboard" and deck["commander_id"] == card_id:
+            conn.execute("UPDATE decks SET commander_id = NULL WHERE id = ?", (deck_id,))
+        conn.execute("UPDATE decks SET updated = ? WHERE id = ?", (_now(), deck_id))
+    return deck_id
+
+
 # --------------------------------------------------------------- library
 
 def summary(user_id, conn=None):
@@ -319,7 +401,7 @@ def summary(user_id, conn=None):
     allocated = conn.execute(
         """SELECT COALESCE(SUM(dc.quantity), 0) AS total
              FROM deck_cards dc JOIN decks d ON d.id = dc.deck_id
-            WHERE d.user_id = ?""", (user_id,)
+            WHERE d.user_id = ? AND dc.zone = 'main' AND dc.proxy = 0""", (user_id,)
     ).fetchone()["total"]
     value = conn.execute(
         """SELECT COALESCE(SUM(c.quantity *
@@ -365,18 +447,23 @@ def deck_state(user_id, deck_id, conn=None):
     if row is None:
         return None
     cards = conn.execute(
-        """SELECT dc.card_id, dc.quantity, c.card_id IS NULL AS missing
+        """SELECT dc.card_id, dc.quantity, dc.zone, dc.proxy, k.data,
+                  c.card_id IS NULL AS missing
              FROM deck_cards dc
+             JOIN cards k ON k.id = dc.card_id
              LEFT JOIN collection c ON c.user_id = ? AND c.card_id = dc.card_id
             WHERE dc.deck_id = ? ORDER BY dc.card_id""",
         (user_id, deck_id),
     ).fetchall()
     lines = [{"card_id": card["card_id"], "quantity": int(card["quantity"]),
-              "missing": bool(card["missing"])} for card in cards]
+              "zone": card["zone"], "proxy": bool(card["proxy"]),
+              "missing": bool(card["missing"]), "card": card_json(card)} for card in cards]
     return {
         "id": row["id"], "name": row["name"], "created": row["created"],
         "updated": row["updated"], "commander_id": row["commander_id"],
-        "cards": lines, "count": sum(line["quantity"] for line in lines),
+        "cards": lines,
+        "count": sum(line["quantity"] for line in lines if line["zone"] == "main"),
+        "maybeboard_count": sum(line["quantity"] for line in lines if line["zone"] == "maybeboard"),
     }
 
 
@@ -394,8 +481,6 @@ def library(user_id):
     conn = db.connect()
     owned = entries(user_id, conn)
     spread = _allocations(conn, user_id)
-    owned_ids = {item["id"] for item in owned}
-
     for item in owned:
         held = spread.get(item["id"], [])
         allocated = sum(h["quantity"] for h in held)
@@ -408,16 +493,7 @@ def library(user_id):
         (user_id,)).fetchall()
     decks = []
     for row in deck_rows:
-        cards = conn.execute(
-            "SELECT card_id, quantity FROM deck_cards WHERE deck_id = ? ORDER BY card_id",
-            (row["id"],)).fetchall()
-        lines = [{"card_id": c["card_id"], "quantity": int(c["quantity"]),
-                  "missing": c["card_id"] not in owned_ids} for c in cards]
-        decks.append({
-            "id": row["id"], "name": row["name"], "created": row["created"],
-            "updated": row["updated"], "commander_id": row["commander_id"],
-            "cards": lines, "count": sum(line["quantity"] for line in lines),
-        })
+        decks.append(deck_state(user_id, row["id"], conn))
 
     return {"entries": owned, "decks": decks, "summary": summary(user_id, conn)}
 
@@ -465,7 +541,7 @@ def import_profile(user_id, profile, mode="merge"):
     """
     if not isinstance(profile, dict):
         raise StoreError("That file is not a profile backup.")
-    if profile.get("format") != PROFILE_FORMAT or profile.get("version") != PROFILE_VERSION:
+    if profile.get("format") != PROFILE_FORMAT or profile.get("version") not in (1, PROFILE_VERSION):
         raise StoreError("That profile is from an unsupported version of MTG Card Viewer.")
     if mode not in ("merge", "replace"):
         raise StoreError("Choose whether to add to or replace your collection.")
@@ -518,25 +594,42 @@ def import_profile(user_id, profile, mode="merge"):
                 if not card_id or not quantity:
                     report["skipped_deck_cards"] += 1
                     continue
+                zone = line.get("zone", "main") if isinstance(line, dict) else "main"
+                proxy = bool(line.get("proxy")) if isinstance(line, dict) else False
+                if zone not in ("main", "maybeboard"):
+                    report["skipped_deck_cards"] += 1
+                    continue
+                card = line.get("card") if isinstance(line, dict) else None
+                if proxy and isinstance(card, dict) and card.get("id") == card_id:
+                    remember_card(card, conn)
+                cached = conn.execute("SELECT 1 FROM cards WHERE id = ?", (card_id,)).fetchone()
+                if proxy and not cached:
+                    # A proxy must carry its card data unless this database has
+                    # already cached the printing. Do not create a broken row.
+                    report["skipped_deck_cards"] += 1
+                    continue
                 owned = conn.execute(
                     "SELECT quantity FROM collection WHERE user_id = ? AND card_id = ?",
                     (user_id, card_id),
                 ).fetchone()
                 allocated = sum(item["quantity"] for item in allocations.get(card_id, []))
-                if owned is None or int(owned["quantity"]) - allocated < quantity:
+                if not proxy and (owned is None or (zone == "main" and
+                                  int(owned["quantity"]) - allocated < quantity)):
                     report["skipped_deck_cards"] += 1
                     continue
                 conn.execute(
-                    """INSERT INTO deck_cards (deck_id, card_id, quantity) VALUES (?, ?, ?)
+                    """INSERT INTO deck_cards (deck_id, card_id, quantity, zone, proxy) VALUES (?, ?, ?, ?, ?)
                        ON CONFLICT (deck_id, card_id)
                        DO UPDATE SET quantity = quantity + excluded.quantity""",
-                    (deck_id, card_id, quantity),
+                    (deck_id, card_id, quantity, zone, 1 if proxy else 0),
                 )
-                allocations.setdefault(card_id, []).append({
-                    "deck_id": deck_id, "deck_name": source_deck.get("name") or DEFAULT_DECK_NAME,
-                    "quantity": quantity,
-                })
-                held_ids.add(card_id)
+                if zone == "main" and not proxy:
+                    allocations.setdefault(card_id, []).append({
+                        "deck_id": deck_id, "deck_name": source_deck.get("name") or DEFAULT_DECK_NAME,
+                        "quantity": quantity,
+                    })
+                if zone == "main":
+                    held_ids.add(card_id)
 
             commander_id = source_deck.get("commander_id")
             if commander_id in held_ids:
