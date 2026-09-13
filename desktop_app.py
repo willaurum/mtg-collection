@@ -33,19 +33,17 @@ import webview
 TITLE = "MTG Card Viewer"
 BACKGROUND = "#0b100d"
 LOCAL_ACCOUNT = "local"
+_desktop_window = None
 
 
 class DesktopApi:
     """Small native bridge for actions the embedded browser cannot do well."""
 
-    def __init__(self):
-        self.window = None
-
     def save_profile(self, contents, filename):
         """Ask the owner where to save a profile backup, then write it there."""
-        if self.window is None:
+        if _desktop_window is None:
             return {"ok": False, "error": "The desktop window is not ready."}
-        paths = self.window.create_file_dialog(
+        paths = _desktop_window.create_file_dialog(
             webview.FileDialog.SAVE,
             save_filename=os.path.basename(filename or "mtg-profile.json"),
             file_types=("JSON files (*.json)",),
@@ -138,6 +136,7 @@ def start_local():
 
 
 def main():
+    global _desktop_window
     parser = argparse.ArgumentParser(description="MTG Card Viewer desktop window")
     parser.add_argument("--server", metavar="URL",
                         help="use a shared server, e.g. http://raspberrypi.local:8000")
@@ -172,13 +171,12 @@ def main():
             return 1
 
     desktop_api = DesktopApi()
-    window = webview.create_window(
+    _desktop_window = webview.create_window(
         title, target,
         width=1180, height=800, min_size=(900, 640),
         background_color=BACKGROUND,
         js_api=desktop_api,
     )
-    desktop_api.window = window
     webview.start()
     return 0
 
