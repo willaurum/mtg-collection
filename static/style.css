@@ -583,6 +583,8 @@ body.busy .progress { opacity: 1; }
 }
 
 .view-select:focus { border-color: var(--line-2); }
+.filter-toggle { white-space: nowrap; }
+.filter-toggle.active { color: var(--gold); background: var(--gold-soft); border-color: var(--bronze); }
 .view-toggle { display: flex; gap: 3px; padding: 2px; border: 1px solid var(--line); border-radius: var(--r-sm); }
 .view-toggle .icon-btn { width: 27px; height: 27px; border-radius: 5px; }
 .view-toggle .icon-btn.active { color: var(--gold); background: var(--gold-soft); }

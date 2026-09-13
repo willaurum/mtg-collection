@@ -41,7 +41,7 @@ const ui = {
   collGrid: el("collGrid"), collEmpty: el("collEmpty"), collSummary: el("collSummary"),
   collectionFilter: el("collectionFilter"),
   collectionSort: el("collectionSort"), collectionGridBtn: el("collectionGridBtn"),
-  collectionListBtn: el("collectionListBtn"),
+  collectionListBtn: el("collectionListBtn"), collectionUnusedBtn: el("collectionUnusedBtn"),
   deckList: el("deckList"), deckListEmpty: el("deckListEmpty"), newDeckBtn: el("newDeckBtn"),
   deckPanel: el("deckPanel"), deckName: el("deckName"), deckSummary: el("deckSummary"),
   deckGrid: el("deckGrid"), deckEmpty: el("deckEmpty"), deckFilter: el("deckFilter"),
@@ -81,6 +81,7 @@ const state = {
     try { return localStorage.getItem("mtg.collection-view") || "grid"; }
     catch { return "grid"; }
   })(),
+  unusedOnly: false,
 };
 
 /* ------------------------------------------------------------- helpers */
@@ -542,7 +543,7 @@ function renderCollection() {
     .filter((entry) => {
       const text = collectionSearchText(entry);
       return terms.every((term) => text.includes(term)) &&
-        (ui.collectionSort.value !== "unused" || (entry.allocated || 0) === 0);
+        (!state.unusedOnly || (entry.allocated || 0) === 0);
     })
     .sort(collectionComparator(ui.collectionSort.value));
   ui.collGrid.classList.toggle("list-view", state.collectionView === "list");
@@ -550,11 +551,13 @@ function renderCollection() {
   ui.collectionListBtn.classList.toggle("active", state.collectionView === "list");
   ui.collectionGridBtn.setAttribute("aria-pressed", state.collectionView === "grid");
   ui.collectionListBtn.setAttribute("aria-pressed", state.collectionView === "list");
+  ui.collectionUnusedBtn.classList.toggle("active", state.unusedOnly);
+  ui.collectionUnusedBtn.setAttribute("aria-pressed", state.unusedOnly);
   ui.collEmpty.hidden = entries.length > 0;
   if (!entries.length) {
     const noUnused = !allEntries.some((entry) => (entry.allocated || 0) === 0);
     ui.collEmpty.textContent = allEntries.length
-      ? (ui.collectionSort.value === "unused" && noUnused
+      ? (state.unusedOnly && noUnused
         ? "Every card is allocated to a deck."
         : "No cards match that name or rules-text search.")
       : "Nothing saved yet — find a card and add it to the collection, or import a list.";
@@ -586,6 +589,11 @@ function collectionComparator(sort) {
 function setCollectionView(view) {
   state.collectionView = view;
   try { localStorage.setItem("mtg.collection-view", view); } catch { /* preference is optional */ }
+  renderCollection();
+}
+
+function toggleUnusedCollection() {
+  state.unusedOnly = !state.unusedOnly;
   renderCollection();
 }
 
@@ -1311,6 +1319,7 @@ ui.collectionFilter.addEventListener("input", renderCollection);
 ui.collectionSort.addEventListener("change", renderCollection);
 ui.collectionGridBtn.addEventListener("click", () => setCollectionView("grid"));
 ui.collectionListBtn.addEventListener("click", () => setCollectionView("list"));
+ui.collectionUnusedBtn.addEventListener("click", toggleUnusedCollection);
 
 ui.navCard.addEventListener("click", showCardView);
 ui.brandBtn.addEventListener("click", showCardView);
