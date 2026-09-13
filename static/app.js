@@ -42,6 +42,8 @@ const ui = {
   collectionFilter: el("collectionFilter"),
   collectionSort: el("collectionSort"), collectionGridBtn: el("collectionGridBtn"),
   collectionListBtn: el("collectionListBtn"), collectionUnusedBtn: el("collectionUnusedBtn"),
+  exportProfileBtn: el("exportProfileBtn"), importProfileBtn: el("importProfileBtn"),
+  profileImportFile: el("profileImportFile"),
   deckList: el("deckList"), deckListEmpty: el("deckListEmpty"), newDeckBtn: el("newDeckBtn"),
   deckPanel: el("deckPanel"), deckName: el("deckName"), deckSummary: el("deckSummary"),
   deckGrid: el("deckGrid"), deckEmpty: el("deckEmpty"), deckFilter: el("deckFilter"),
@@ -616,6 +618,61 @@ function toggleUnusedCollection() {
   state.unusedOnly = !state.unusedOnly;
   savePreference("mtg.collection-unused", state.unusedOnly ? "1" : "0");
   renderCollection();
+}
+
+async function exportProfile() {
+  try {
+    const profile = await getJson("/api/profile/export");
+    const blob = new Blob([JSON.stringify(profile, null, 2)], { type: "application/json" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.href = url;
+    link.download = `mtg-profile-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setStatus("Profile exported — keep the file somewhere safe.");
+  } catch (error) {
+    setStatus(error.message, true);
+  }
+}
+
+function readProfileFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      importProfile(JSON.parse(String(reader.result || "")));
+    } catch {
+      setStatus("That file is not valid JSON.", true);
+    }
+  };
+  reader.onerror = () => setStatus(`Could not read ${file.name}.`, true);
+  reader.readAsText(file);
+}
+
+async function importProfile(profile) {
+  if (!window.confirm(
+    "Import this profile? Its cards will be added to your collection and its decks recreated. " +
+    "Nothing you already own will be replaced.")) return;
+  try {
+    const data = await getJson("/api/profile/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ profile }),
+    });
+    applyLibrary(data);
+    const report = data.imported_profile || {};
+    const skipped = (report.skipped_cards || 0) + (report.skipped_deck_cards || 0);
+    setStatus(
+      `Imported ${report.cards || 0} card${report.cards === 1 ? "" : "s"} and ` +
+      `${report.decks || 0} deck${report.decks === 1 ? "" : "s"}.` +
+      (skipped ? ` Skipped ${skipped} incomplete record${skipped === 1 ? "" : "s"}.` : ""),
+    );
+  } catch (error) {
+    setStatus(error.message, true);
+  }
 }
 
 function setCollectionSort() {
@@ -1487,6 +1544,12 @@ ui.collectionSort.addEventListener("change", setCollectionSort);
 ui.collectionGridBtn.addEventListener("click", () => setCollectionView("grid"));
 ui.collectionListBtn.addEventListener("click", () => setCollectionView("list"));
 ui.collectionUnusedBtn.addEventListener("click", toggleUnusedCollection);
+ui.exportProfileBtn.addEventListener("click", exportProfile);
+ui.importProfileBtn.addEventListener("click", () => ui.profileImportFile.click());
+ui.profileImportFile.addEventListener("change", (event) => {
+  readProfileFile(event.target.files[0]);
+  event.target.value = "";
+});
 ui.commandInput.addEventListener("input", () => renderCommandPalette(true));
 ui.commandPalette.addEventListener("click", (event) => {
   if (event.target === ui.commandPalette) closeCommandPalette();

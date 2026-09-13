@@ -11,6 +11,7 @@ os.environ["MTG_DATA_DIR"] = TEST_DATA
 
 import auth  # noqa: E402  (the data directory must be set before importing)
 import db  # noqa: E402
+import store  # noqa: E402
 auth.secret_key = lambda: b"test-session-key" * 4  # noqa: E731
 from server import app  # noqa: E402
 
@@ -86,6 +87,25 @@ class MutationPatchTests(unittest.TestCase):
         deleted = self.post("/api/decks/delete", {"id": deck_id})
         self.assertEqual(deleted["removed_decks"], [deck_id])
         self.assertEqual(deleted["entries"][0]["available"], 1)
+
+    def test_profile_export_import_preserves_cards_and_decks(self):
+        store.add_card(self.user_id, card("bolt", "Lightning Bolt"), quantity=2)
+        deck_id = store.create_deck(self.user_id, "Burn")
+        store.deck_add(self.user_id, deck_id, "bolt")
+        store.set_commander(self.user_id, deck_id, "bolt")
+
+        profile = store.export_profile(self.user_id)
+        other_user = auth.create_user("backup-user", "a long test password")
+        report = store.import_profile(other_user, profile)
+        copied = store.library(other_user)
+
+        self.assertEqual(profile["format"], store.PROFILE_FORMAT)
+        self.assertEqual(report["cards"], 2)
+        self.assertEqual(report["decks"], 1)
+        self.assertEqual(copied["entries"][0]["quantity"], 2)
+        self.assertEqual(copied["decks"][0]["name"], "Burn")
+        self.assertEqual(copied["decks"][0]["cards"][0]["quantity"], 1)
+        self.assertEqual(copied["decks"][0]["commander_id"], "bolt")
 
 
 if __name__ == "__main__":

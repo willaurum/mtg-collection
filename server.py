@@ -194,6 +194,26 @@ def api_library():
     return _library()
 
 
+@app.get("/api/profile/export")
+@auth.api_login_required
+def api_profile_export():
+    """Downloadable data only: account credentials never leave the server."""
+    return jsonify(store.export_profile(auth.user_id()))
+
+
+@app.post("/api/profile/import")
+@auth.api_login_required
+def api_profile_import():
+    profile = (request.get_json(silent=True) or {}).get("profile")
+    try:
+        report = store.import_profile(auth.user_id(), profile)
+    except store.StoreError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except (OSError, ValueError) as exc:
+        return jsonify({"error": "Could not import that profile: %s" % exc}), 500
+    return _library(imported_profile=report)
+
+
 @app.post("/api/collection/add")
 @auth.api_login_required
 def api_collection_add():

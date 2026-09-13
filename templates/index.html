@@ -165,6 +165,10 @@
         <div>
           <h1>Collection</h1>
           <p class="sub" id="collSummary">&nbsp;</p>
+          <div class="profile-actions">
+            <button class="link-btn" id="exportProfileBtn">Export profile</button>
+            <button class="link-btn" id="importProfileBtn">Import profile</button>
+          </div>
         </div>
         <div class="head-actions collection-toolbar">
           <div class="collection-search-row">
@@ -205,6 +209,7 @@
           <b>Import</b> a list.
         </p>
       </div>
+      <input type="file" id="profileImportFile" accept="application/json,.json" hidden>
     </section>
 
     <!-- ----------------------------------------------------- import -->

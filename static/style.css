@@ -400,6 +400,9 @@ body.busy .progress { opacity: 1; }
 .collection-search-row .collection-filter { width: 100%; }
 .collection-control-row { justify-content: flex-end; }
 
+.profile-actions { display: flex; align-items: center; gap: 2px; margin: 5px -7px -4px; }
+.profile-actions .link-btn { width: auto; padding: 4px 7px; font-size: 10.5px; }
+
 .toolbar-hint {
   flex: 0 0 auto;
   color: var(--faint);

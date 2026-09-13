@@ -21,6 +21,8 @@ import db
 
 MAX_NAME = 60
 DEFAULT_DECK_NAME = "New deck"
+PROFILE_FORMAT = "mtg-card-viewer-profile"
+PROFILE_VERSION = 1
 
 
 class StoreError(Exception):
@@ -418,3 +420,121 @@ def library(user_id):
         })
 
     return {"entries": owned, "decks": decks, "summary": summary(user_id, conn)}
+
+
+# ---------------------------------------------------------- profile backup
+
+def export_profile(user_id):
+    """A portable backup of one user's cards and decks, never their account."""
+    snapshot = library(user_id)
+    return {
+        "format": PROFILE_FORMAT,
+        "version": PROFILE_VERSION,
+        "exported": _now(),
+        "collection": [
+            {"card": entry["card"], "quantity": entry["quantity"]}
+            for entry in snapshot["entries"]
+        ],
+        "decks": [
+            {
+                "name": deck["name"],
+                "commander_id": deck["commander_id"],
+                "cards": deck["cards"],
+            }
+            for deck in snapshot["decks"]
+        ],
+    }
+
+
+def _profile_quantity(value):
+    try:
+        quantity = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return quantity if quantity > 0 else 0
+
+
+def import_profile(user_id, profile):
+    """Merge a profile backup into one account without replacing existing data.
+
+    Cards are added to the collection, and each imported deck gets a fresh id.
+    This lets a backup be imported into a new account or merged safely into an
+    existing one. Broken records are skipped and counted rather than leaving a
+    half-valid deck behind.
+    """
+    if not isinstance(profile, dict):
+        raise StoreError("That file is not a profile backup.")
+    if profile.get("format") != PROFILE_FORMAT or profile.get("version") != PROFILE_VERSION:
+        raise StoreError("That profile is from an unsupported version of MTG Card Viewer.")
+    collection = profile.get("collection")
+    decks = profile.get("decks")
+    if not isinstance(collection, list) or not isinstance(decks, list):
+        raise StoreError("That profile backup is incomplete.")
+
+    report = {
+        "cards": 0, "printings": 0, "decks": 0,
+        "skipped_cards": 0, "skipped_deck_cards": 0,
+    }
+    with db.transaction() as conn:
+        for item in collection:
+            card = item.get("card") if isinstance(item, dict) else None
+            quantity = _profile_quantity(item.get("quantity")) if isinstance(item, dict) else 0
+            if not isinstance(card, dict) or not card.get("id") or not quantity:
+                report["skipped_cards"] += 1
+                continue
+            card_id = remember_card(card, conn)
+            conn.execute(
+                """INSERT INTO collection (user_id, card_id, quantity, added)
+                   VALUES (?, ?, ?, ?)
+                   ON CONFLICT (user_id, card_id)
+                   DO UPDATE SET quantity = quantity + excluded.quantity""",
+                (user_id, card_id, quantity, _now()),
+            )
+            report["cards"] += quantity
+            report["printings"] += 1
+
+        allocations = _allocations(conn, user_id)
+        for source_deck in decks:
+            if not isinstance(source_deck, dict) or not isinstance(source_deck.get("cards"), list):
+                report["skipped_deck_cards"] += 1
+                continue
+            deck_id = uuid.uuid4().hex
+            now = _now()
+            conn.execute(
+                """INSERT INTO decks (id, user_id, name, commander_id, created, updated)
+                   VALUES (?, ?, ?, NULL, ?, ?)""",
+                (deck_id, user_id, _clean_name(source_deck.get("name")), now, now),
+            )
+            held_ids = set()
+            for line in source_deck["cards"]:
+                card_id = line.get("card_id") if isinstance(line, dict) else None
+                quantity = _profile_quantity(line.get("quantity")) if isinstance(line, dict) else 0
+                if not card_id or not quantity:
+                    report["skipped_deck_cards"] += 1
+                    continue
+                owned = conn.execute(
+                    "SELECT quantity FROM collection WHERE user_id = ? AND card_id = ?",
+                    (user_id, card_id),
+                ).fetchone()
+                allocated = sum(item["quantity"] for item in allocations.get(card_id, []))
+                if owned is None or int(owned["quantity"]) - allocated < quantity:
+                    report["skipped_deck_cards"] += 1
+                    continue
+                conn.execute(
+                    """INSERT INTO deck_cards (deck_id, card_id, quantity) VALUES (?, ?, ?)
+                       ON CONFLICT (deck_id, card_id)
+                       DO UPDATE SET quantity = quantity + excluded.quantity""",
+                    (deck_id, card_id, quantity),
+                )
+                allocations.setdefault(card_id, []).append({
+                    "deck_id": deck_id, "deck_name": source_deck.get("name") or DEFAULT_DECK_NAME,
+                    "quantity": quantity,
+                })
+                held_ids.add(card_id)
+
+            commander_id = source_deck.get("commander_id")
+            if commander_id in held_ids:
+                conn.execute("UPDATE decks SET commander_id = ? WHERE id = ?",
+                             (commander_id, deck_id))
+            report["decks"] += 1
+    return report
