@@ -65,7 +65,7 @@ const state = {
   suggestTimer: null,
   suggestSeq: 0,
   cardSeq: 0,
-  library: { entries: [], decks: [], summary: {} },  // the server's snapshot
+  library: { entries: [], decks: [], summary: {} },  // loaded once, then patched
   entryById: new Map(),
   deckId: null,        // deck currently open in the builder
   pickerDeck: null,    // "add to deck" choice on the card view
@@ -372,11 +372,34 @@ function renderRecent() {
 
 /* ------------------------------------------------- collection & decks */
 
-/** The server hands back a whole snapshot on every change; this is the only
-    place it is unpacked, so availability can never disagree with the decks. */
+/** Apply the complete snapshot returned when the application first loads. */
 function applyLibrary(data) {
   state.library = data;
   state.entryById = new Map(data.entries.map((e) => [e.id, e]));
+  applySummary(data.summary);
+  renderDeckList();
+  renderOwned();
+  if (!ui.collectionPanel.hidden) renderCollection();
+  if (!ui.deckPanel.hidden) renderDeckPanel();
+}
+
+/** Merge the small, server-authoritative response from one mutation. */
+function applyPatch(data) {
+  const entries = new Map(state.library.entries.map((entry) => [entry.id, entry]));
+  (data.removed_entries || []).forEach((id) => entries.delete(id));
+  (data.entries || []).forEach((entry) => entries.set(entry.id, entry));
+  state.library.entries = [...entries.values()].sort((a, b) =>
+    (b.added || "").localeCompare(a.added || "") ||
+    (a.name || "").localeCompare(b.name || ""));
+
+  const decks = new Map(state.library.decks.map((deck) => [deck.id, deck]));
+  (data.removed_decks || []).forEach((id) => decks.delete(id));
+  (data.decks || []).forEach((deck) => decks.set(deck.id, deck));
+  state.library.decks = [...decks.values()].sort((a, b) =>
+    (a.name || "").localeCompare(b.name || ""));
+
+  state.library.summary = data.summary;
+  state.entryById = new Map(state.library.entries.map((entry) => [entry.id, entry]));
   applySummary(data.summary);
   renderDeckList();
   renderOwned();
@@ -399,7 +422,7 @@ async function mutate(url, body, success) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body || {}),
     });
-    applyLibrary(data);
+    applyPatch(data);
     if (success) setStatus(success(data));
     return data;
   } catch (error) {

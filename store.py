@@ -131,8 +131,8 @@ def remove_card(user_id, card_id, drop_all=False):
     return entry(user_id, card_id)
 
 
-def entry(user_id, card_id):
-    conn = db.connect()
+def entry(user_id, card_id, conn=None):
+    conn = conn or db.connect()
     row = conn.execute(
         """SELECT c.card_id, c.quantity, c.added, k.data
              FROM collection c JOIN cards k ON k.id = c.card_id
@@ -190,6 +190,17 @@ def _owned_deck(conn, user_id, deck_id):
     return row
 
 
+def deck_card_ids(user_id, deck_id, conn=None):
+    """The collection records whose allocation labels refer to this deck."""
+    conn = conn or db.connect()
+    _owned_deck(conn, user_id, deck_id)
+    return [row["card_id"] for row in conn.execute(
+        """SELECT dc.card_id FROM deck_cards dc JOIN decks d ON d.id = dc.deck_id
+             WHERE dc.deck_id = ? AND d.user_id = ?""",
+        (deck_id, user_id),
+    )]
+
+
 def rename_deck(user_id, deck_id, name):
     with db.transaction() as conn:
         _owned_deck(conn, user_id, deck_id)
@@ -202,8 +213,11 @@ def delete_deck(user_id, deck_id):
     """Deleting a deck releases every copy it held back to the collection."""
     with db.transaction() as conn:
         _owned_deck(conn, user_id, deck_id)
+        released = [row["card_id"] for row in conn.execute(
+            "SELECT card_id FROM deck_cards WHERE deck_id = ?", (deck_id,)
+        )]
         conn.execute("DELETE FROM decks WHERE id = ?", (deck_id,))   # cascades
-    return True
+    return released
 
 
 def set_commander(user_id, deck_id, card_id):
@@ -293,6 +307,86 @@ def deck_remove(user_id, deck_id, card_id, drop_all=False):
 
 # --------------------------------------------------------------- library
 
+def summary(user_id, conn=None):
+    """Small aggregate for the library header, without loading every card."""
+    conn = conn or db.connect()
+    owned = conn.execute(
+        "SELECT COUNT(*) AS distinct_count, COALESCE(SUM(quantity), 0) AS total "
+        "FROM collection WHERE user_id = ?", (user_id,)
+    ).fetchone()
+    allocated = conn.execute(
+        """SELECT COALESCE(SUM(dc.quantity), 0) AS total
+             FROM deck_cards dc JOIN decks d ON d.id = dc.deck_id
+            WHERE d.user_id = ?""", (user_id,)
+    ).fetchone()["total"]
+    value = conn.execute(
+        """SELECT COALESCE(SUM(c.quantity *
+                   CAST(json_extract(k.data, '$.prices.usd') AS REAL)), 0) AS total
+             FROM collection c JOIN cards k ON k.id = c.card_id
+            WHERE c.user_id = ?""", (user_id,)
+    ).fetchone()["total"]
+    total = int(owned["total"])
+    allocated = int(allocated)
+    return {
+        "distinct": int(owned["distinct_count"]),
+        "total": total,
+        "value": round(float(value), 2),
+        "free": total - allocated,
+        "allocated": allocated,
+        "decks": int(conn.execute(
+            "SELECT COUNT(*) FROM decks WHERE user_id = ?", (user_id,)
+        ).fetchone()[0]),
+    }
+
+
+def entry_state(user_id, card_id, conn=None):
+    """One collection entry, enriched with its current deck allocations."""
+    conn = conn or db.connect()
+    item = entry(user_id, card_id, conn)
+    if item is None:
+        return None
+    locations = _allocations(conn, user_id).get(card_id, [])
+    allocated = sum(location["quantity"] for location in locations)
+    item.update({
+        "allocated": allocated,
+        "available": max(0, item["quantity"] - allocated),
+        "locations": locations,
+    })
+    return item
+
+
+def deck_state(user_id, deck_id, conn=None):
+    """One deck with its current cards; return None when it no longer exists."""
+    conn = conn or db.connect()
+    row = conn.execute("SELECT * FROM decks WHERE id = ? AND user_id = ?",
+                       (deck_id, user_id)).fetchone()
+    if row is None:
+        return None
+    cards = conn.execute(
+        """SELECT dc.card_id, dc.quantity, c.card_id IS NULL AS missing
+             FROM deck_cards dc
+             LEFT JOIN collection c ON c.user_id = ? AND c.card_id = dc.card_id
+            WHERE dc.deck_id = ? ORDER BY dc.card_id""",
+        (user_id, deck_id),
+    ).fetchall()
+    lines = [{"card_id": card["card_id"], "quantity": int(card["quantity"]),
+              "missing": bool(card["missing"])} for card in cards]
+    return {
+        "id": row["id"], "name": row["name"], "created": row["created"],
+        "updated": row["updated"], "commander_id": row["commander_id"],
+        "cards": lines, "count": sum(line["quantity"] for line in lines),
+    }
+
+
+def patch(user_id, entry_ids=(), deck_ids=()):
+    """The small, self-consistent state change returned after a mutation."""
+    conn = db.connect()
+    entries = [item for card_id in dict.fromkeys(entry_ids)
+               if (item := entry_state(user_id, card_id, conn)) is not None]
+    decks = [deck for deck_id in dict.fromkeys(deck_ids)
+             if (deck := deck_state(user_id, deck_id, conn)) is not None]
+    return {"entries": entries, "decks": decks, "summary": summary(user_id, conn)}
+
 def library(user_id):
     """One consistent snapshot: collection, decks, and who holds what."""
     conn = db.connect()
@@ -300,21 +394,12 @@ def library(user_id):
     spread = _allocations(conn, user_id)
     owned_ids = {item["id"] for item in owned}
 
-    free_total = 0
-    value = 0.0
     for item in owned:
         held = spread.get(item["id"], [])
         allocated = sum(h["quantity"] for h in held)
         item["allocated"] = allocated
         item["available"] = max(0, item["quantity"] - allocated)
         item["locations"] = held
-        free_total += item["available"]
-        price = ((item.get("card") or {}).get("prices") or {}).get("usd")
-        if price:
-            try:
-                value += float(price) * item["quantity"]
-            except (TypeError, ValueError):
-                pass
 
     deck_rows = conn.execute(
         "SELECT * FROM decks WHERE user_id = ? ORDER BY name COLLATE NOCASE",
@@ -332,15 +417,4 @@ def library(user_id):
             "cards": lines, "count": sum(line["quantity"] for line in lines),
         })
 
-    return {
-        "entries": owned,
-        "decks": decks,
-        "summary": {
-            "distinct": len(owned),
-            "total": sum(item["quantity"] for item in owned),
-            "value": round(value, 2),
-            "free": free_total,
-            "allocated": sum(h["quantity"] for hs in spread.values() for h in hs),
-            "decks": len(decks),
-        },
-    }
+    return {"entries": owned, "decks": decks, "summary": summary(user_id, conn)}

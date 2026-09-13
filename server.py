@@ -156,26 +156,36 @@ def api_printings():
 
 
 def _library(**extra):
-    """Every mutation answers with the whole snapshot, so the page cannot drift."""
+    """The complete snapshot, used for the initial load and explicit refreshes."""
     payload = store.library(auth.user_id())
     payload.update(extra)
     return jsonify(payload)
 
 
-def _store_call(work):
-    """Run a store operation, turning a broken rule into a 409 the page shows.
+def _patch_response(entry_ids=(), removed_entry_ids=(), deck_ids=(),
+                    removed_deck_ids=(), entry_id=None, **extra):
+    """Return just the records changed by a successful mutation."""
+    payload = store.patch(auth.user_id(), entry_ids, deck_ids)
+    payload.update({
+        "removed_entries": list(dict.fromkeys(removed_entry_ids)),
+        "removed_decks": list(dict.fromkeys(removed_deck_ids)),
+    })
+    if entry_id is not None:
+        payload["entry"] = next((item for item in payload["entries"]
+                                 if item["id"] == entry_id), None)
+    payload.update(extra)
+    return jsonify(payload)
 
-    Deck operations answer with a deck id, collection ones with the entry that
-    is left; either way the caller gets the whole library back.
-    """
+
+def _store_call(work, changed):
+    """Run a store operation and return its compact state patch."""
     try:
         result = work()
     except store.StoreError as exc:
         return jsonify({"error": str(exc)}), 409
     except (OSError, ValueError) as exc:
         return jsonify({"error": "Could not save that: %s" % exc}), 500
-    return _library(**({"deck_id": result} if isinstance(result, str)
-                       else {"entry": result}))
+    return _patch_response(**changed(result))
 
 
 @app.get("/api/library")
@@ -192,7 +202,8 @@ def api_collection_add():
     if not card.get("id"):
         return jsonify({"error": "No card to add."}), 400
     return _store_call(lambda: store.add_card(
-        auth.user_id(), card, int(payload.get("quantity", 1))))
+        auth.user_id(), card, int(payload.get("quantity", 1))),
+        lambda entry: {"entry_ids": [entry["id"]], "entry_id": entry["id"]})
 
 
 @app.post("/api/collection/remove")
@@ -203,7 +214,9 @@ def api_collection_remove():
     if not card_id:
         return jsonify({"error": "No card to remove."}), 400
     return _store_call(lambda: store.remove_card(
-        auth.user_id(), card_id, bool(payload.get("all"))))
+        auth.user_id(), card_id, bool(payload.get("all"))),
+        lambda entry: ({"entry_ids": [entry["id"]], "entry_id": entry["id"]}
+                       if entry else {"removed_entry_ids": [card_id], "entry_id": card_id}))
 
 
 @app.post("/api/decks/create")
@@ -211,26 +224,28 @@ def api_collection_remove():
 def api_deck_create():
     payload = request.get_json(silent=True) or {}
     return _store_call(lambda: store.create_deck(
-        auth.user_id(), payload.get("name") or store.DEFAULT_DECK_NAME))
+        auth.user_id(), payload.get("name") or store.DEFAULT_DECK_NAME),
+        lambda deck_id: {"deck_ids": [deck_id], "deck_id": deck_id})
 
 
 @app.post("/api/decks/rename")
 @auth.api_login_required
 def api_deck_rename():
     payload = request.get_json(silent=True) or {}
+    deck_id = payload.get("id")
     return _store_call(lambda: store.rename_deck(
-        auth.user_id(), payload.get("id"), payload.get("name")))
+        auth.user_id(), deck_id, payload.get("name")),
+        lambda changed_id: {"entry_ids": store.deck_card_ids(auth.user_id(), changed_id),
+                            "deck_ids": [changed_id], "deck_id": changed_id})
 
 
 @app.post("/api/decks/delete")
 @auth.api_login_required
 def api_deck_delete():
     payload = request.get_json(silent=True) or {}
-    try:
-        store.delete_deck(auth.user_id(), payload.get("id"))
-    except store.StoreError as exc:
-        return jsonify({"error": str(exc)}), 409
-    return _library()
+    deck_id = payload.get("id")
+    return _store_call(lambda: store.delete_deck(auth.user_id(), deck_id),
+        lambda released: {"entry_ids": released, "removed_deck_ids": [deck_id]})
 
 
 @app.post("/api/decks/commander")
@@ -238,7 +253,8 @@ def api_deck_delete():
 def api_deck_commander():
     payload = request.get_json(silent=True) or {}
     return _store_call(lambda: store.set_commander(
-        auth.user_id(), payload.get("deck_id"), payload.get("card_id")))
+        auth.user_id(), payload.get("deck_id"), payload.get("card_id")),
+        lambda deck_id: {"deck_ids": [deck_id], "deck_id": deck_id})
 
 
 @app.post("/api/decks/add")
@@ -247,7 +263,9 @@ def api_deck_add():
     payload = request.get_json(silent=True) or {}
     return _store_call(lambda: store.deck_add(
         auth.user_id(), payload.get("deck_id"), payload.get("card_id"),
-        int(payload.get("quantity", 1))))
+        int(payload.get("quantity", 1))),
+        lambda deck_id: {"entry_ids": [payload.get("card_id")],
+                         "deck_ids": [deck_id], "deck_id": deck_id})
 
 
 @app.post("/api/decks/remove")
@@ -256,7 +274,9 @@ def api_deck_remove():
     payload = request.get_json(silent=True) or {}
     return _store_call(lambda: store.deck_remove(
         auth.user_id(), payload.get("deck_id"), payload.get("card_id"),
-        bool(payload.get("all"))))
+        bool(payload.get("all"))),
+        lambda deck_id: {"entry_ids": [payload.get("card_id")],
+                         "deck_ids": [deck_id], "deck_id": deck_id})
 
 
 # Preview resolves a list against Scryfall; the commit reuses that work.
@@ -297,7 +317,8 @@ def api_import_commit():
             [(item["card"], item["entry"]["quantity"]) for item in resolved])
     except (OSError, ValueError) as exc:
         return jsonify({"error": "Import failed: %s" % exc}), 500
-    return _library(imported=added)
+    return _patch_response(
+        entry_ids=[item["card"]["id"] for item in resolved], imported=added)
 
 
 @app.post("/api/collection/open")

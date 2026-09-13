@@ -88,7 +88,9 @@ Bolt costs no API call at all.
 SQLite runs in WAL mode, so a reader never blocks the writer — which matters on
 a Pi that might lose power mid-write. Each rule (one printing per row, decks
 never holding more copies than you own) is enforced inside a transaction rather
-than by the page asking nicely.
+than by the page asking nicely. The page loads one complete library snapshot at
+startup; routine edits then return only the card or deck that changed, plus the
+updated totals, keeping normal use light over Wi-Fi.
 
 ## Running it on a Raspberry Pi
 
