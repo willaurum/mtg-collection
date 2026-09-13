@@ -166,29 +166,35 @@
           <h1>Collection</h1>
           <p class="sub" id="collSummary">&nbsp;</p>
         </div>
-        <div class="head-actions">
-          <input id="collectionFilter" class="mini-input collection-filter"
-                 placeholder="Search name or rules text…" autocomplete="off"
-                 spellcheck="false" aria-label="Search collection by name or rules text">
-          <select id="collectionSort" class="view-select" aria-label="Sort collection">
-            <option value="name">Name</option>
-            <option value="newest">Recently added</option>
-            <option value="quantity">Most copies</option>
-            <option value="value">Highest value</option>
-            <option value="set">Set</option>
-          </select>
-          <button class="btn filter-toggle" id="collectionUnusedBtn" aria-pressed="false">
-            Unused only
-          </button>
-          <div class="view-toggle" aria-label="Collection layout">
-            <button class="icon-btn active" id="collectionGridBtn" title="Card grid view"
-                    aria-label="Card grid view" aria-pressed="true">
-              <svg class="ico"><use href="#i-grid"/></svg>
+        <div class="head-actions collection-toolbar">
+          <div class="collection-search-row">
+            <input id="collectionFilter" class="mini-input collection-filter"
+                   placeholder="Search name or rules text…" autocomplete="off"
+                   spellcheck="false" aria-label="Search collection by name or rules text">
+            <span class="toolbar-hint"><kbd>/</kbd> filter</span>
+          </div>
+          <div class="collection-control-row">
+            <select id="collectionSort" class="view-select" aria-label="Sort collection">
+              <option value="name">Name</option>
+              <option value="newest">Recently added</option>
+              <option value="quantity">Most copies</option>
+              <option value="value">Highest value</option>
+              <option value="set">Set</option>
+            </select>
+            <button class="btn filter-toggle" id="collectionUnusedBtn" aria-pressed="false">
+              Unused only
             </button>
-            <button class="icon-btn" id="collectionListBtn" title="Compact list view"
-                    aria-label="Compact list view" aria-pressed="false">
-              <svg class="ico"><use href="#i-card"/></svg>
-            </button>
+            <div class="view-toggle" aria-label="Collection layout">
+              <button class="icon-btn active" id="collectionGridBtn" title="Card grid view"
+                      aria-label="Card grid view" aria-pressed="true">
+                <svg class="ico"><use href="#i-grid"/></svg>
+              </button>
+              <button class="icon-btn" id="collectionListBtn" title="Compact list view"
+                      aria-label="Compact list view" aria-pressed="false">
+                <svg class="ico"><use href="#i-card"/></svg>
+              </button>
+            </div>
+            <span class="toolbar-hint desktop-hint"><kbd>G</kbd> grid&nbsp; <kbd>L</kbd> list</span>
           </div>
         </div>
       </header>
@@ -283,6 +289,24 @@
 </div>
 
 <div class="toast" id="toast"></div>
+
+<aside class="card-preview" id="cardPreview" aria-hidden="true" hidden>
+  <img id="previewArt" alt="">
+  <div class="preview-copy">
+    <h2 id="previewName"></h2>
+    <p id="previewType"></p>
+    <p id="previewText"></p>
+  </div>
+</aside>
+
+<div class="command-overlay" id="commandPalette" hidden>
+  <section class="command-dialog" role="dialog" aria-modal="true" aria-label="Command palette">
+    <input id="commandInput" autocomplete="off" spellcheck="false"
+           placeholder="Type a command or deck name…" aria-label="Find a command">
+    <ul class="command-list" id="commandList" role="listbox"></ul>
+    <p class="command-help"><kbd>↑↓</kbd> choose <kbd>Enter</kbd> run <kbd>Esc</kbd> close</p>
+  </section>
+</div>
 
 <script src="/static/app.js"></script>
 </body>

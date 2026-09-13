@@ -56,11 +56,13 @@ That produces `dist\MTGCardViewer.exe`. The spec bundles `templates/` and
 | Save a card | **Add to collection** under the details — saves the printing you are looking at |
 | Import a list | **Import** in the rail — paste a decklist or CSV, or pick a file; preview before it writes |
 | See what you own | **Collection** in the rail; search rules text, sort by name/newest/copies/value/set, toggle unused cards, or switch between card grid and compact list |
+| Preview a collection card | Hover it, or focus it with the keyboard; click or press **Enter** to open it |
 | Remove a copy | **Remove one** on the card, or the **−** badge on a collection tile |
 | Build a deck | **+** beside *Decks* in the rail — cards land in columns by type |
 | Revisit a card | Click it under **Recent** in the rail — the list survives restarts |
 | Open the card page | **Scryfall** button — opens your real browser, not the app window |
 | Focus the search box | **Ctrl+L** |
+| Open commands | **Ctrl+K** — jump to views, imports, random, new decks, or any deck |
 
 Misspell a card badly and the toast suggests real names instead of just
 failing.

@@ -57,7 +57,20 @@ const ui = {
   reportBad: el("reportBad"), reportProblemHead: el("reportProblemHead"),
   importHint: el("importHint"),
   whoami: el("whoami"), whoName: el("whoName"), logoutBtn: el("logoutBtn"),
+  cardPreview: el("cardPreview"), previewArt: el("previewArt"),
+  previewName: el("previewName"), previewType: el("previewType"), previewText: el("previewText"),
+  commandPalette: el("commandPalette"), commandInput: el("commandInput"),
+  commandList: el("commandList"),
 };
+
+function readPreference(key, fallback) {
+  try { return localStorage.getItem(key) || fallback; }
+  catch { return fallback; }
+}
+
+function savePreference(key, value) {
+  try { localStorage.setItem(key, value); } catch { /* preference is optional */ }
+}
 
 const state = {
   card: null,
@@ -77,12 +90,18 @@ const state = {
   deleteTimer: null,
   importToken: null,   // ties a previewed import to its commit
   problems: new Map(), // card id -> Commander rule breaks in the open deck
-  collectionView: (() => {
-    try { return localStorage.getItem("mtg.collection-view") || "grid"; }
-    catch { return "grid"; }
-  })(),
-  unusedOnly: false,
+  collectionView: readPreference("mtg.collection-view", "grid"),
+  collectionSort: readPreference("mtg.collection-sort", "name"),
+  unusedOnly: readPreference("mtg.collection-unused", "0") === "1",
+  commandItems: [],
+  commandIndex: 0,
 };
+
+ui.collectionSort.value = state.collectionSort;
+if (!ui.collectionSort.value) {
+  state.collectionSort = "name";
+  ui.collectionSort.value = "name";
+}
 
 /* ------------------------------------------------------------- helpers */
 
@@ -537,6 +556,7 @@ function collectionSearchText(entry) {
 }
 
 function renderCollection() {
+  hideCardPreview();
   const allEntries = state.library.entries || [];
   const terms = ui.collectionFilter.value.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
   const entries = allEntries
@@ -563,7 +583,7 @@ function renderCollection() {
       : "Nothing saved yet — find a card and add it to the collection, or import a list.";
   }
   ui.collGrid.innerHTML = entries.map((entry) => `
-    <figure class="coll-card" data-id="${escapeHtml(entry.id)}">
+    <figure class="coll-card" data-id="${escapeHtml(entry.id)}" tabindex="0">
       ${thumbHtml(entry, `×${entry.quantity}`,
         `<button class="drop" data-drop="${escapeHtml(entry.id)}" title="Remove one copy">−</button>`)}
       ${locationChips(entry)}
@@ -588,13 +608,49 @@ function collectionComparator(sort) {
 
 function setCollectionView(view) {
   state.collectionView = view;
-  try { localStorage.setItem("mtg.collection-view", view); } catch { /* preference is optional */ }
+  savePreference("mtg.collection-view", view);
   renderCollection();
 }
 
 function toggleUnusedCollection() {
   state.unusedOnly = !state.unusedOnly;
+  savePreference("mtg.collection-unused", state.unusedOnly ? "1" : "0");
   renderCollection();
+}
+
+function setCollectionSort() {
+  state.collectionSort = ui.collectionSort.value;
+  savePreference("mtg.collection-sort", state.collectionSort);
+  renderCollection();
+}
+
+function showCardPreview(cardId, anchor) {
+  const entry = state.entryById.get(cardId);
+  if (!entry) return;
+  const card = entry.card || {};
+  const text = frontFace(card).oracle_text || card.oracle_text || "No rules text.";
+  const art = imageUrl(card, 0);
+  ui.previewArt.src = art ? `/img?u=${encodeURIComponent(art)}` : "";
+  ui.previewArt.alt = entry.name || "";
+  ui.previewName.textContent = entry.name || "Unknown card";
+  ui.previewType.textContent = frontFace(card).type_line || card.type_line || "";
+  ui.previewText.textContent = text.length > 220 ? text.slice(0, 217) + "…" : text;
+  ui.cardPreview.hidden = false;
+
+  const rect = anchor.getBoundingClientRect();
+  const width = ui.cardPreview.offsetWidth || 256;
+  const height = ui.cardPreview.offsetHeight || 340;
+  const left = rect.left > window.innerWidth * 0.57
+    ? Math.max(12, rect.left - width - 14)
+    : Math.min(window.innerWidth - width - 12, rect.right + 14);
+  const top = Math.max(12, Math.min(rect.top, window.innerHeight - height - 12));
+  ui.cardPreview.style.left = `${left}px`;
+  ui.cardPreview.style.top = `${top}px`;
+}
+
+function hideCardPreview() {
+  ui.cardPreview.hidden = true;
+  ui.previewArt.removeAttribute("src");
 }
 
 /** Shared tile behaviour: open the card, drop a copy, or jump to a deck. */
@@ -604,6 +660,18 @@ function wireTiles(root, onOpen) {
       const target = event.target;
       if (target.dataset.drop || target.dataset.deck || target.dataset.step) return;
       onOpen(node.dataset.id);
+    });
+    node.addEventListener("mouseenter", () => showCardPreview(node.dataset.id, node));
+    node.addEventListener("mouseleave", hideCardPreview);
+    node.addEventListener("focusin", () => showCardPreview(node.dataset.id, node));
+    node.addEventListener("focusout", (event) => {
+      if (!node.contains(event.relatedTarget)) hideCardPreview();
+    });
+    node.addEventListener("keydown", (event) => {
+      if ((event.key === "Enter" || event.key === " ") && event.target === node) {
+        event.preventDefault();
+        onOpen(node.dataset.id);
+      }
     });
   });
   root.querySelectorAll(".drop").forEach((node) => {
@@ -1017,6 +1085,7 @@ const NAV = {
 
 function showView(panel, navKey) {
   disarmDelete();
+  hideCardPreview();
   [ui.cardPanel, ui.collectionPanel, ui.deckPanel, ui.importPanel]
     .forEach((node) => { node.hidden = node !== panel; });
   Object.entries(NAV).forEach(([key, node]) =>
@@ -1052,6 +1121,68 @@ function showImportView() {
   showView(ui.importPanel, "import");
   renderDeckList();
   ui.importText.focus();
+}
+
+/* ------------------------------------------------------ command palette */
+
+function commandChoices() {
+  const items = [
+    { label: "Search cards", detail: "Focus the Scryfall search", run: () => {
+      ui.search.focus(); ui.search.select();
+    } },
+    { label: "Open Collection", detail: "Browse cards you own", run: showCollectionView },
+    { label: "Filter Collection", detail: "Open Collection and focus its filter", run: () => {
+      showCollectionView(); ui.collectionFilter.focus();
+    } },
+    { label: "Import cards", detail: "Paste a decklist or CSV", run: showImportView },
+    { label: "New deck", detail: "Create an empty deck", run: newDeck },
+    { label: "Random card", detail: "Draw a card from Scryfall", run: random },
+  ];
+  (state.library.decks || []).forEach((deck) => items.push({
+    label: `Open deck: ${deck.name}`,
+    detail: `${deck.count} cards`,
+    run: () => openDeck(deck.id),
+  }));
+  return items;
+}
+
+function renderCommandPalette(resetIndex = false) {
+  const query = ui.commandInput.value.trim().toLocaleLowerCase();
+  state.commandItems = commandChoices().filter((item) =>
+    `${item.label} ${item.detail}`.toLocaleLowerCase().includes(query));
+  if (resetIndex) state.commandIndex = 0;
+  state.commandIndex = Math.max(0, Math.min(state.commandIndex, state.commandItems.length - 1));
+  ui.commandList.innerHTML = state.commandItems.length
+    ? state.commandItems.map((item, index) => `
+      <li><button class="command-item${index === state.commandIndex ? " active" : ""}"
+                  data-command="${index}" role="option" aria-selected="${index === state.commandIndex}">
+        <span>${escapeHtml(item.label)}</span><small>${escapeHtml(item.detail)}</small>
+      </button></li>`).join("")
+    : '<li class="command-empty">No matching commands.</li>';
+  ui.commandList.querySelectorAll("[data-command]").forEach((node) => {
+    node.addEventListener("click", () => runCommand(Number(node.dataset.command)));
+  });
+}
+
+function openCommandPalette() {
+  hideCardPreview();
+  ui.commandPalette.hidden = false;
+  ui.commandInput.value = "";
+  state.commandIndex = 0;
+  renderCommandPalette();
+  requestAnimationFrame(() => ui.commandInput.focus());
+}
+
+function closeCommandPalette() {
+  ui.commandPalette.hidden = true;
+  ui.commandInput.value = "";
+}
+
+function runCommand(index) {
+  const item = state.commandItems[index];
+  if (!item) return;
+  closeCommandPalette();
+  item.run();
 }
 
 function resetImportReport() {
@@ -1304,10 +1435,46 @@ ui.printings.addEventListener("change", () => {
 });
 
 document.addEventListener("keydown", (event) => {
+  if (!ui.commandPalette.hidden) {
+    if (event.key === "Escape") { event.preventDefault(); closeCommandPalette(); return; }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      state.commandIndex = Math.min(state.commandIndex + 1, state.commandItems.length - 1);
+      renderCommandPalette();
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      state.commandIndex = Math.max(state.commandIndex - 1, 0);
+      renderCommandPalette();
+      return;
+    }
+    if (event.key === "Enter") { event.preventDefault(); runCommand(state.commandIndex); }
+    return;
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+    event.preventDefault();
+    openCommandPalette();
+    return;
+  }
   if (event.ctrlKey && event.key.toLowerCase() === "l") {
     event.preventDefault();
     ui.search.focus();
     ui.search.select();
+    return;
+  }
+  const target = event.target;
+  const editing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement || target.isContentEditable;
+  if (editing) return;
+  if (event.key === "/") {
+    event.preventDefault();
+    showCollectionView();
+    ui.collectionFilter.focus();
+  } else if (event.key.toLowerCase() === "g" && !ui.collectionPanel.hidden) {
+    setCollectionView("grid");
+  } else if (event.key.toLowerCase() === "l" && !ui.collectionPanel.hidden) {
+    setCollectionView("list");
   }
 });
 
@@ -1316,10 +1483,14 @@ ui.removeBtn.addEventListener("click", () => state.card && removeFromCollection(
 ui.viewCollectionBtn.addEventListener("click", showCollectionView);
 ui.openFolderBtn.addEventListener("click", openFolder);
 ui.collectionFilter.addEventListener("input", renderCollection);
-ui.collectionSort.addEventListener("change", renderCollection);
+ui.collectionSort.addEventListener("change", setCollectionSort);
 ui.collectionGridBtn.addEventListener("click", () => setCollectionView("grid"));
 ui.collectionListBtn.addEventListener("click", () => setCollectionView("list"));
 ui.collectionUnusedBtn.addEventListener("click", toggleUnusedCollection);
+ui.commandInput.addEventListener("input", () => renderCommandPalette(true));
+ui.commandPalette.addEventListener("click", (event) => {
+  if (event.target === ui.commandPalette) closeCommandPalette();
+});
 
 ui.navCard.addEventListener("click", showCardView);
 ui.brandBtn.addEventListener("click", showCardView);
