@@ -7,61 +7,128 @@
   <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 
-  <header class="topbar">
-    <div class="brand">
-      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
-        <path d="M16 1 31 16 16 31 1 16Z" fill="none" stroke="currentColor" stroke-width="2"/>
-        <path d="M16 8 24 16 16 24 8 16Z" fill="currentColor"/>
-      </svg>
-      <div class="brand-text">
-        <h1>MTG Card Viewer</h1>
-        <p class="tagline">Every card ever printed</p>
+<svg class="sprite" aria-hidden="true">
+  <symbol id="i-search" viewBox="0 0 16 16">
+    <circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/>
+  </symbol>
+  <symbol id="i-card" viewBox="0 0 16 16">
+    <rect x="3" y="1.5" width="10" height="13" rx="1.5"/><path d="M5.5 11.5h5"/>
+  </symbol>
+  <symbol id="i-grid" viewBox="0 0 16 16">
+    <rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1"/>
+    <rect x="9" y="1.5" width="5.5" height="5.5" rx="1"/>
+    <rect x="1.5" y="9" width="5.5" height="5.5" rx="1"/>
+    <rect x="9" y="9" width="5.5" height="5.5" rx="1"/>
+  </symbol>
+  <symbol id="i-decks" viewBox="0 0 16 16">
+    <rect x="1.5" y="3.5" width="8" height="11" rx="1.5"/><path d="M12 2.5h1A1.5 1.5 0 0 1 14.5 4v8"/>
+  </symbol>
+  <symbol id="i-import" viewBox="0 0 16 16">
+    <path d="M8 1.5v8"/><path d="m4.75 6.5 3.25 3.25L11.25 6.5"/><path d="M2 11v2.5h12V11"/>
+  </symbol>
+  <symbol id="i-dice" viewBox="0 0 16 16">
+    <rect x="2" y="2" width="12" height="12" rx="2.5"/>
+    <circle cx="5.75" cy="5.75" r=".95" fill="currentColor" stroke="none"/>
+    <circle cx="10.25" cy="10.25" r=".95" fill="currentColor" stroke="none"/>
+  </symbol>
+  <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3.5v9M3.5 8h9"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 16 16">
+    <path d="M1.5 12.5v-9h4l1.5 2h7.5v7z"/>
+  </symbol>
+  <symbol id="i-link" viewBox="0 0 16 16">
+    <path d="M9 2.5h4.5V7"/><path d="M13.5 2.5 7 9"/><path d="M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/>
+  </symbol>
+</svg>
+
+<header class="topbar">
+  <a class="brand" id="brandBtn" title="Card view">
+    <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+      <path d="M16 1 31 16 16 31 1 16Z" fill="none" stroke="currentColor" stroke-width="1.8"/>
+      <path d="M16 8.5 23.5 16 16 23.5 8.5 16Z" fill="currentColor"/>
+    </svg>
+    <span>MTG&nbsp;Card&nbsp;Viewer</span>
+  </a>
+
+  <div class="searchbar">
+    <svg class="ico"><use href="#i-search"/></svg>
+    <input id="search" type="text" placeholder="Search any card…"
+           autocomplete="off" spellcheck="false">
+    <ul class="suggestions" id="suggestions" hidden></ul>
+  </div>
+
+  <button class="btn" id="randomBtn">
+    <svg class="ico"><use href="#i-dice"/></svg><span>Random</span>
+  </button>
+
+  <div class="progress" id="progress"></div>
+</header>
+
+<div class="shell">
+
+  <nav class="rail">
+    <button class="nav" id="navCard" data-view="card">
+      <svg class="ico"><use href="#i-card"/></svg><span>Card</span>
+    </button>
+    <button class="nav" id="viewCollectionBtn" data-view="collection">
+      <svg class="ico"><use href="#i-grid"/></svg><span>Collection</span>
+      <em class="count" id="collCount">0</em>
+    </button>
+    <button class="nav" id="importBtn" data-view="import">
+      <svg class="ico"><use href="#i-import"/></svg><span>Import</span>
+    </button>
+
+    <div class="rail-group">
+      <div class="rail-head">
+        <svg class="ico"><use href="#i-decks"/></svg><span>Decks</span>
+        <button class="icon-btn" id="newDeckBtn" title="New deck">
+          <svg class="ico"><use href="#i-plus"/></svg>
+        </button>
       </div>
+      <ul class="deck-list" id="deckList"></ul>
+      <p class="rail-empty" id="deckListEmpty">No decks yet</p>
     </div>
-    <div class="top-actions">
-      <span class="status" id="status">Ready</span>
-      <button class="btn ghost" id="randomBtn">Random</button>
-      <button class="btn ghost" id="scryfallBtn" disabled>Scryfall</button>
-    </div>
-  </header>
 
-  <main class="layout">
-
-    <aside class="panel search-panel">
-      <h2 class="panel-head">Find a card</h2>
-
-      <div class="search-wrap">
-        <input id="search" type="text" placeholder="Start typing a name…" autocomplete="off" spellcheck="false">
-        <ul class="suggestions" id="suggestions" hidden></ul>
-      </div>
-      <button class="btn primary block" id="searchBtn">Search</button>
-
-      <h3 class="side-head">Recently viewed</h3>
+    <div class="rail-group grow">
+      <div class="rail-head"><span>Recent</span></div>
       <ul class="recent" id="recent"></ul>
-      <p class="empty-state" id="recentEmpty">Cards you look up will collect here.</p>
-    </aside>
+      <p class="rail-empty" id="recentEmpty">Cards you view collect here</p>
+    </div>
 
-    <section class="panel card-panel" id="cardPanel">
-      <div class="card-grid">
+    <div class="rail-foot">
+      <div class="whoami" id="whoami" hidden>
+        <span class="who">Signed in as <b id="whoName"></b></span>
+        <button class="link-btn" id="logoutBtn" style="width:auto">Sign out</button>
+      </div>
+      <button class="link-btn" id="openFolderBtn">
+        <svg class="ico"><use href="#i-folder"/></svg>Collection folder
+      </button>
+      <p class="credit">Card data &amp; images from Scryfall</p>
+    </div>
+  </nav>
 
+  <main class="content">
+
+    <!-- ------------------------------------------------------- card -->
+    <section class="view" id="cardPanel">
+      <div class="card-layout">
         <div class="art-column">
-          <div class="art-frame" id="artFrame">
+          <div class="art-frame">
             <img id="cardArt" alt="">
             <div class="art-placeholder" id="artPlaceholder">Drawing a card…</div>
           </div>
-          <button class="btn ghost block" id="flipBtn" hidden>Flip card</button>
+          <button class="btn block" id="flipBtn" hidden>Flip card</button>
         </div>
 
         <div class="details">
-          <div class="title-row">
-            <h2 id="cardName">&nbsp;</h2>
+          <header class="card-head">
+            <h1 id="cardName">&nbsp;</h1>
             <span class="mana" id="manaCost"></span>
-          </div>
+          </header>
           <p class="typeline">
             <span id="typeLine"></span>
             <span class="pt" id="pt"></span>
@@ -69,29 +136,128 @@
 
           <div class="rules" id="rules"></div>
 
-          <div class="meta">
-            <p class="set-line"><span class="dot" id="rarityDot"></span><span id="setLine"></span></p>
-            <p class="muted" id="artistLine"></p>
+          <dl class="facts">
+            <div><dt>Set</dt><dd><span class="dot" id="rarityDot"></span><span id="setLine"></span></dd></div>
+            <div><dt>Artist</dt><dd id="artistLine"></dd></div>
+            <div><dt>Prices</dt><dd class="chips" id="priceChips"></dd></div>
+            <div><dt>Formats</dt><dd class="chips" id="legalChips"></dd></div>
+            <div><dt>Printing</dt><dd><select id="printings" disabled></select></dd></div>
+          </dl>
+
+          <footer class="card-actions">
+            <button class="btn primary" id="addBtn">Add to collection</button>
+            <button class="btn" id="removeBtn" hidden>Remove one</button>
+            <button class="btn quiet" id="scryfallBtn" disabled>
+              <svg class="ico"><use href="#i-link"/></svg>Scryfall
+            </button>
+            <span class="spacer"></span>
+            <select class="deck-picker" id="deckPicker" hidden></select>
+            <button class="btn" id="addToDeckBtn" hidden>Add to deck</button>
+          </footer>
+          <p class="owned" id="ownedLabel"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------- collection -->
+    <section class="view" id="collectionPanel" hidden>
+      <header class="view-head">
+        <div>
+          <h1>Collection</h1>
+          <p class="sub" id="collSummary">&nbsp;</p>
+        </div>
+      </header>
+      <div class="view-body">
+        <div class="coll-grid" id="collGrid"></div>
+        <p class="empty" id="collEmpty" hidden>
+          Nothing saved yet — find a card and press <b>Add to collection</b>, or
+          <b>Import</b> a list.
+        </p>
+      </div>
+    </section>
+
+    <!-- ----------------------------------------------------- import -->
+    <section class="view" id="importPanel" hidden>
+      <header class="view-head">
+        <div>
+          <h1>Import</h1>
+          <p class="sub">A decklist or a CSV export. Nothing is saved until you confirm.</p>
+        </div>
+        <div class="head-actions">
+          <button class="btn" id="importFileBtn">Choose file…</button>
+        </div>
+      </header>
+      <input type="file" id="importFile" accept=".txt,.csv,.dek,.dec,text/plain,text/csv" hidden>
+
+      <div class="view-body import-body">
+        <div class="import-input">
+          <textarea id="importText" spellcheck="false" placeholder="4 Lightning Bolt
+2x Birds of Paradise
+1 Sol Ring (LTC) 284
+3 Forest [M10]
+
+…or paste a CSV exported from Archidekt, Moxfield, or similar."></textarea>
+          <div class="import-actions">
+            <button class="btn primary" id="previewBtn">Preview</button>
+            <button class="btn quiet" id="clearImportBtn">Clear</button>
+            <span class="sub" id="importHint"></span>
           </div>
-
-          <div class="chips" id="priceChips"></div>
-          <div class="chips" id="legalChips"></div>
-
-          <label class="printing">
-            <span class="label">Printing</span>
-            <select id="printings" disabled></select>
-          </label>
         </div>
 
+        <div class="import-report" id="importReport" hidden>
+          <div class="report-head">
+            <h2 id="reportTitle">&nbsp;</h2>
+            <button class="btn primary" id="commitBtn">Add to collection</button>
+          </div>
+          <ul class="report-list" id="reportOk"></ul>
+          <h3 class="report-sub" id="reportProblemHead" hidden>Not imported</h3>
+          <ul class="report-list problems" id="reportBad"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------------ decks -->
+    <section class="view" id="deckPanel" hidden>
+      <header class="view-head">
+        <div class="deck-title">
+          <div class="deck-name-row">
+            <input id="deckName" class="deck-name" maxlength="60" spellcheck="false"
+                   aria-label="Deck name">
+            <span class="legality" id="deckLegality" hidden></span>
+          </div>
+          <p class="sub" id="deckSummary">&nbsp;</p>
+          <p class="deck-problems" id="deckProblems" hidden></p>
+        </div>
+        <div class="head-actions">
+          <button class="btn quiet danger" id="deleteDeckBtn">Delete deck</button>
+        </div>
+      </header>
+
+      <div class="view-body deck-body">
+        <div class="deck-main">
+          <div class="deck-columns" id="deckGrid"></div>
+          <p class="empty" id="deckEmpty" hidden>
+            Empty deck — add cards from your collection on the right.
+          </p>
+        </div>
+
+        <aside class="deck-side">
+          <div class="side-head">Free to add</div>
+          <input id="deckFilter" class="mini-input" placeholder="Filter by name…"
+                 autocomplete="off" spellcheck="false">
+          <ul class="avail-list" id="availList"></ul>
+          <p class="empty" id="availEmpty" hidden>
+            Every copy you own is already in a deck.
+          </p>
+        </aside>
       </div>
     </section>
 
   </main>
+</div>
 
-  <footer class="footer">
-    Card data and images from <span class="link" id="scryfallCredit">Scryfall</span> · free, no API key
-  </footer>
+<div class="toast" id="toast"></div>
 
-  <script src="/static/app.js"></script>
+<script src="/static/app.js"></script>
 </body>
 </html>

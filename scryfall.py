@@ -22,16 +22,20 @@ API = "https://api.scryfall.com"
 API_PREFIX = "https://api.scryfall.com/"
 IMAGE_PREFIX = "https://cards.scryfall.io/"
 USER_AGENT = "MTGCardViewer/1.0 (desktop card viewer)"
-MIN_INTERVAL = 0.1  # seconds between requests, per Scryfall's rate-limit guidance
+MIN_INTERVAL = 0.15  # seconds between requests; Scryfall asks for 50-100ms and
+                    # starts refusing around 10/sec, so leave real headroom
 TIMEOUT = 20
 
 
 def _cache_root():
-    """Beside the source when running from a checkout; per-user once frozen."""
-    if getattr(sys, "frozen", False):
-        base = os.environ.get("LOCALAPPDATA") or os.environ.get("HOME") or tempfile.gettempdir()
+    """Images live beside the database, wherever that is."""
+    try:
+        import db
+        return os.path.join(db.data_dir(), "images")
+    except Exception:  # noqa: BLE001 - fall back rather than fail to import
+        base = (os.environ.get("LOCALAPPDATA") or os.environ.get("HOME")
+                or tempfile.gettempdir())
         return os.path.join(base, "MTGCardViewer", "images")
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), ".cache", "images")
 
 
 CACHE_DIR = _cache_root()
@@ -118,6 +122,45 @@ def autocomplete(partial):
         return _get_json("%s/cards/autocomplete?%s" % (API, query)).get("data", [])
     except ScryfallError:
         return []
+
+
+COLLECTION_BATCH = 75  # Scryfall's documented maximum per request
+
+
+def cards_by_identifiers(identifiers):
+    """Resolve many cards at once via /cards/collection.
+
+    Identifiers are {"id": ...}, {"set": ..., "collector_number": ...} or
+    {"name": ...}.  Seventy-five at a time turns a 100-card decklist into two
+    requests instead of a hundred, which is the whole point of the endpoint.
+
+    Returns (cards, not_found) where not_found echoes the failed identifiers.
+    """
+    cards, missing = [], []
+    for start in range(0, len(identifiers), COLLECTION_BATCH):
+        chunk = identifiers[start:start + COLLECTION_BATCH]
+        payload = json.dumps({"identifiers": chunk}).encode("utf-8")
+        _throttle()
+        request = urllib.request.Request(
+            "%s/cards/collection" % API,
+            data=payload,
+            headers={
+                "User-Agent": USER_AGENT,
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+                body = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            raise ScryfallError("Scryfall refused the batch (HTTP %s)" % exc.code,
+                                status=exc.code) from exc
+        except urllib.error.URLError as exc:
+            raise ScryfallError("Network error: %s" % exc.reason) from exc
+        cards.extend(body.get("data") or [])
+        missing.extend(body.get("not_found") or [])
+    return cards, missing
 
 
 def printings_by_uri(uri):

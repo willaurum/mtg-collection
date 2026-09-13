@@ -3,3 +3,10 @@ __pycache__/
 *.pyc
 build/
 dist/
+.venv/
+
+# never commit a database or a signing key
+*.db
+*.db-shm
+*.db-wal
+secret.key

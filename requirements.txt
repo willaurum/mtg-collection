@@ -1,2 +1,5 @@
-flask>=3.0
+Flask>=3.0
 pywebview>=5.0
+
+# Server only (the Raspberry Pi); the desktop app does not need it.
+# gunicorn>=21.2

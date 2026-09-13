@@ -1,0 +1,38 @@
+# Install:
+#   sudo cp deploy/mtgviewer.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now mtgviewer
+# Watch:  journalctl -u mtgviewer -f
+
+[Unit]
+Description=MTG Card Viewer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/mtg
+Environment=MTG_DATA_DIR=/home/pi/mtg-data
+# Set this once the server is reached over HTTPS, so the session cookie is
+# marked Secure.  Leave it off while it is plain HTTP on the LAN.
+#Environment=MTG_HTTPS=1
+ExecStart=/home/pi/mtg/.venv/bin/gunicorn \
+    --bind 0.0.0.0:8000 \
+    --workers 1 --threads 8 \
+    --timeout 60 \
+    --access-logfile - --error-logfile - \
+    server:app
+Restart=on-failure
+RestartSec=5
+
+# The service only ever needs its own data directory.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/pi/mtg-data
+
+[Install]
+WantedBy=multi-user.target

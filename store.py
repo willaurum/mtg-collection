@@ -1,0 +1,346 @@
+"""Collection and deck operations, scoped to one user.
+
+This replaces the loose-JSON store for anything served over the network. The
+rules it enforces are the same ones the file version enforced:
+
+  * a printing is one row, and adding it again raises the count;
+  * the copies of a card spread across a user's decks can never exceed the
+    number that user owns.
+
+Every function takes `user_id` first. There is no way to read or write another
+user's rows without passing their id, which is the point.
+"""
+
+from __future__ import annotations
+
+import datetime
+import json
+import uuid
+
+import db
+
+MAX_NAME = 60
+DEFAULT_DECK_NAME = "New deck"
+
+
+class StoreError(Exception):
+    """An operation the rules do not allow."""
+
+
+def _now():
+    return datetime.datetime.now().isoformat(timespec="seconds")
+
+
+def _clean_name(name):
+    return " ".join(str(name or "").split())[:MAX_NAME] or DEFAULT_DECK_NAME
+
+
+# ------------------------------------------------------------ card cache
+
+def remember_card(card, conn=None):
+    """Upsert a Scryfall payload into the shared cache."""
+    conn = conn or db.connect()
+    card_id = card.get("id")
+    if not card_id:
+        raise StoreError("Card has no id")
+    conn.execute(
+        """INSERT INTO cards (id, name, set_code, collector_number, rarity, data, fetched)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT (id) DO UPDATE SET
+             name = excluded.name, set_code = excluded.set_code,
+             collector_number = excluded.collector_number, rarity = excluded.rarity,
+             data = excluded.data, fetched = excluded.fetched""",
+        (card_id, card.get("name") or "", card.get("set"), card.get("collector_number"),
+         card.get("rarity"), json.dumps(card, ensure_ascii=False), _now()),
+    )
+    return card_id
+
+
+def card_json(row):
+    try:
+        return json.loads(row["data"])
+    except (ValueError, TypeError):
+        return {}
+
+
+# ------------------------------------------------------------ collection
+
+def add_card(user_id, card, quantity=1):
+    """Add copies of a printing, merging with any already held."""
+    quantity = max(1, int(quantity))
+    with db.transaction() as conn:
+        card_id = remember_card(card, conn)
+        conn.execute(
+            """INSERT INTO collection (user_id, card_id, quantity, added)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT (user_id, card_id)
+               DO UPDATE SET quantity = quantity + excluded.quantity""",
+            (user_id, card_id, quantity, _now()),
+        )
+    return entry(user_id, card_id)
+
+
+def add_many(user_id, pairs):
+    """Bulk add — one transaction for a whole import. pairs: [(card, qty)]."""
+    total = 0
+    with db.transaction() as conn:
+        for card, quantity in pairs:
+            quantity = max(1, int(quantity))
+            card_id = remember_card(card, conn)
+            conn.execute(
+                """INSERT INTO collection (user_id, card_id, quantity, added)
+                   VALUES (?, ?, ?, ?)
+                   ON CONFLICT (user_id, card_id)
+                   DO UPDATE SET quantity = quantity + excluded.quantity""",
+                (user_id, card_id, quantity, _now()),
+            )
+            total += quantity
+    return total
+
+
+def remove_card(user_id, card_id, drop_all=False):
+    """Remove one copy, or all of them.  Refuses to strip a copy a deck holds."""
+    with db.transaction() as conn:
+        row = conn.execute(
+            "SELECT quantity FROM collection WHERE user_id = ? AND card_id = ?",
+            (user_id, card_id),
+        ).fetchone()
+        if not row:
+            return None
+
+        owned = int(row["quantity"])
+        held = _allocations(conn, user_id).get(card_id, [])
+        allocated = sum(item["quantity"] for item in held)
+        wanted = owned if drop_all else 1
+        if owned - allocated < wanted:
+            where = ", ".join("%s (%d)" % (h["deck_name"], h["quantity"]) for h in held)
+            raise StoreError(
+                "%d of your %d copies %s in a deck - %s. Take %s out of the deck first."
+                % (allocated, owned, "is" if allocated == 1 else "are", where,
+                   "it" if allocated == 1 else "them")
+            )
+
+        remaining = 0 if drop_all else owned - 1
+        if remaining <= 0:
+            conn.execute("DELETE FROM collection WHERE user_id = ? AND card_id = ?",
+                         (user_id, card_id))
+            return None
+        conn.execute(
+            "UPDATE collection SET quantity = ? WHERE user_id = ? AND card_id = ?",
+            (remaining, user_id, card_id))
+    return entry(user_id, card_id)
+
+
+def entry(user_id, card_id):
+    conn = db.connect()
+    row = conn.execute(
+        """SELECT c.card_id, c.quantity, c.added, k.data
+             FROM collection c JOIN cards k ON k.id = c.card_id
+            WHERE c.user_id = ? AND c.card_id = ?""",
+        (user_id, card_id),
+    ).fetchone()
+    return _entry_from_row(row) if row else None
+
+
+def _entry_from_row(row):
+    card = card_json(row)
+    return {
+        "id": row["card_id"],
+        "name": card.get("name"),
+        "set": card.get("set"),
+        "set_name": card.get("set_name"),
+        "collector_number": card.get("collector_number"),
+        "rarity": card.get("rarity"),
+        "quantity": int(row["quantity"]),
+        "added": row["added"],
+        "card": card,
+    }
+
+
+def entries(user_id, conn=None):
+    conn = conn or db.connect()
+    rows = conn.execute(
+        """SELECT c.card_id, c.quantity, c.added, k.data
+             FROM collection c JOIN cards k ON k.id = c.card_id
+            WHERE c.user_id = ?
+            ORDER BY c.added DESC, k.name COLLATE NOCASE""",
+        (user_id,),
+    ).fetchall()
+    return [_entry_from_row(row) for row in rows]
+
+
+# ----------------------------------------------------------------- decks
+
+def create_deck(user_id, name=DEFAULT_DECK_NAME):
+    deck_id = uuid.uuid4().hex
+    now = _now()
+    with db.transaction() as conn:
+        conn.execute(
+            """INSERT INTO decks (id, user_id, name, commander_id, created, updated)
+               VALUES (?, ?, ?, NULL, ?, ?)""",
+            (deck_id, user_id, _clean_name(name), now, now))
+    return deck_id
+
+
+def _owned_deck(conn, user_id, deck_id):
+    row = conn.execute("SELECT * FROM decks WHERE id = ? AND user_id = ?",
+                       (deck_id, user_id)).fetchone()
+    if not row:
+        raise StoreError("That deck no longer exists.")
+    return row
+
+
+def rename_deck(user_id, deck_id, name):
+    with db.transaction() as conn:
+        _owned_deck(conn, user_id, deck_id)
+        conn.execute("UPDATE decks SET name = ?, updated = ? WHERE id = ?",
+                     (_clean_name(name), _now(), deck_id))
+    return deck_id
+
+
+def delete_deck(user_id, deck_id):
+    """Deleting a deck releases every copy it held back to the collection."""
+    with db.transaction() as conn:
+        _owned_deck(conn, user_id, deck_id)
+        conn.execute("DELETE FROM decks WHERE id = ?", (deck_id,))   # cascades
+    return True
+
+
+def set_commander(user_id, deck_id, card_id):
+    with db.transaction() as conn:
+        _owned_deck(conn, user_id, deck_id)
+        if card_id:
+            held = conn.execute(
+                "SELECT 1 FROM deck_cards WHERE deck_id = ? AND card_id = ?",
+                (deck_id, card_id)).fetchone()
+            if not held:
+                raise StoreError("Add the card to the deck before making it the commander.")
+        conn.execute("UPDATE decks SET commander_id = ?, updated = ? WHERE id = ?",
+                     (card_id or None, _now(), deck_id))
+    return deck_id
+
+
+def _allocations(conn, user_id):
+    """card id -> [{deck_id, deck_name, quantity}] across this user's decks."""
+    rows = conn.execute(
+        """SELECT dc.card_id, dc.quantity, d.id AS deck_id, d.name AS deck_name
+             FROM deck_cards dc JOIN decks d ON d.id = dc.deck_id
+            WHERE d.user_id = ?
+            ORDER BY d.name COLLATE NOCASE""",
+        (user_id,),
+    ).fetchall()
+    spread = {}
+    for row in rows:
+        spread.setdefault(row["card_id"], []).append({
+            "deck_id": row["deck_id"], "deck_name": row["deck_name"],
+            "quantity": int(row["quantity"]),
+        })
+    return spread
+
+
+def deck_add(user_id, deck_id, card_id, quantity=1):
+    quantity = max(1, int(quantity))
+    with db.transaction() as conn:
+        _owned_deck(conn, user_id, deck_id)
+        owned = conn.execute(
+            "SELECT quantity FROM collection WHERE user_id = ? AND card_id = ?",
+            (user_id, card_id)).fetchone()
+        if not owned:
+            raise StoreError("That card is not in your collection.")
+
+        held = _allocations(conn, user_id).get(card_id, [])
+        allocated = sum(item["quantity"] for item in held)
+        free = int(owned["quantity"]) - allocated
+        if free < quantity:
+            name = conn.execute("SELECT name FROM cards WHERE id = ?",
+                                (card_id,)).fetchone()
+            where = ", ".join("%s (%d)" % (h["deck_name"], h["quantity"]) for h in held)
+            raise StoreError(
+                "You own %d %s and every spare copy is already in a deck%s."
+                % (int(owned["quantity"]), name["name"] if name else "of that card",
+                   " - " + where if where else ""))
+
+        conn.execute(
+            """INSERT INTO deck_cards (deck_id, card_id, quantity) VALUES (?, ?, ?)
+               ON CONFLICT (deck_id, card_id)
+               DO UPDATE SET quantity = quantity + excluded.quantity""",
+            (deck_id, card_id, quantity))
+        conn.execute("UPDATE decks SET updated = ? WHERE id = ?", (_now(), deck_id))
+    return deck_id
+
+
+def deck_remove(user_id, deck_id, card_id, drop_all=False):
+    with db.transaction() as conn:
+        deck = _owned_deck(conn, user_id, deck_id)
+        row = conn.execute(
+            "SELECT quantity FROM deck_cards WHERE deck_id = ? AND card_id = ?",
+            (deck_id, card_id)).fetchone()
+        if not row:
+            return deck_id
+        remaining = 0 if drop_all else int(row["quantity"]) - 1
+        if remaining > 0:
+            conn.execute(
+                "UPDATE deck_cards SET quantity = ? WHERE deck_id = ? AND card_id = ?",
+                (remaining, deck_id, card_id))
+        else:
+            conn.execute("DELETE FROM deck_cards WHERE deck_id = ? AND card_id = ?",
+                         (deck_id, card_id))
+            if deck["commander_id"] == card_id:
+                conn.execute("UPDATE decks SET commander_id = NULL WHERE id = ?", (deck_id,))
+        conn.execute("UPDATE decks SET updated = ? WHERE id = ?", (_now(), deck_id))
+    return deck_id
+
+
+# --------------------------------------------------------------- library
+
+def library(user_id):
+    """One consistent snapshot: collection, decks, and who holds what."""
+    conn = db.connect()
+    owned = entries(user_id, conn)
+    spread = _allocations(conn, user_id)
+    owned_ids = {item["id"] for item in owned}
+
+    free_total = 0
+    value = 0.0
+    for item in owned:
+        held = spread.get(item["id"], [])
+        allocated = sum(h["quantity"] for h in held)
+        item["allocated"] = allocated
+        item["available"] = max(0, item["quantity"] - allocated)
+        item["locations"] = held
+        free_total += item["available"]
+        price = ((item.get("card") or {}).get("prices") or {}).get("usd")
+        if price:
+            try:
+                value += float(price) * item["quantity"]
+            except (TypeError, ValueError):
+                pass
+
+    deck_rows = conn.execute(
+        "SELECT * FROM decks WHERE user_id = ? ORDER BY name COLLATE NOCASE",
+        (user_id,)).fetchall()
+    decks = []
+    for row in deck_rows:
+        cards = conn.execute(
+            "SELECT card_id, quantity FROM deck_cards WHERE deck_id = ? ORDER BY card_id",
+            (row["id"],)).fetchall()
+        lines = [{"card_id": c["card_id"], "quantity": int(c["quantity"]),
+                  "missing": c["card_id"] not in owned_ids} for c in cards]
+        decks.append({
+            "id": row["id"], "name": row["name"], "created": row["created"],
+            "updated": row["updated"], "commander_id": row["commander_id"],
+            "cards": lines, "count": sum(line["quantity"] for line in lines),
+        })
+
+    return {
+        "entries": owned,
+        "decks": decks,
+        "summary": {
+            "distinct": len(owned),
+            "total": sum(item["quantity"] for item in owned),
+            "value": round(value, 2),
+            "free": free_total,
+            "allocated": sum(h["quantity"] for hs in spread.values() for h in hs),
+            "decks": len(decks),
+        },
+    }
