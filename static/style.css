@@ -382,6 +382,7 @@ body.busy .progress { opacity: 1; }
 
 .view-head h1 { font-family: var(--display); font-size: 21px; }
 .head-actions { display: flex; gap: 8px; flex: 0 0 auto; }
+.collection-filter { width: min(310px, 34vw); margin: 0; }
 
 .view-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 20px 26px 26px; }
 
@@ -1035,6 +1036,7 @@ body.busy .progress { opacity: 1; }
   .count { position: absolute; margin: 0; transform: translate(14px, -10px); }
   .brand span { display: none; }
   .card-layout { grid-template-columns: minmax(0, 1fr); }
+  .collection-filter { width: 190px; }
   .art-column { position: static; max-width: 260px; }
   .deck-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
   .deck-side { border-left: 0; border-top: 1px solid var(--line); max-height: 240px; padding: 16px 20px; }

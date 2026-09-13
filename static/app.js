@@ -39,6 +39,7 @@ const ui = {
   openFolderBtn: el("openFolderBtn"),
   cardPanel: el("cardPanel"), collectionPanel: el("collectionPanel"),
   collGrid: el("collGrid"), collEmpty: el("collEmpty"), collSummary: el("collSummary"),
+  collectionFilter: el("collectionFilter"),
   deckList: el("deckList"), deckListEmpty: el("deckListEmpty"), newDeckBtn: el("newDeckBtn"),
   deckPanel: el("deckPanel"), deckName: el("deckName"), deckSummary: el("deckSummary"),
   deckGrid: el("deckGrid"), deckEmpty: el("deckEmpty"), deckFilter: el("deckFilter"),
@@ -519,9 +520,31 @@ function thumbHtml(entry, badge, extra) {
     </figcaption>`;
 }
 
+function collectionSearchText(entry) {
+  const card = entry.card || {};
+  const faces = card.card_faces || [];
+  return [entry.name, card.name, card.type_line, card.oracle_text,
+          ...faces.flatMap((face) => [face.name, face.type_line, face.oracle_text])]
+    .filter(Boolean).join(" ").toLocaleLowerCase();
+}
+
 function renderCollection() {
-  const entries = state.library.entries || [];
+  const allEntries = state.library.entries || [];
+  const terms = ui.collectionFilter.value.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+  const entries = allEntries
+    .filter((entry) => {
+      const text = collectionSearchText(entry);
+      return terms.every((term) => text.includes(term));
+    })
+    .sort((a, b) => (a.name || "").localeCompare(b.name || "") ||
+      (a.set || "").localeCompare(b.set || "") ||
+      (a.collector_number || "").localeCompare(b.collector_number || ""));
   ui.collEmpty.hidden = entries.length > 0;
+  if (!entries.length) {
+    ui.collEmpty.textContent = allEntries.length
+      ? "No cards match that name or rules-text search."
+      : "Nothing saved yet — find a card and add it to the collection, or import a list.";
+  }
   ui.collGrid.innerHTML = entries.map((entry) => `
     <figure class="coll-card" data-id="${escapeHtml(entry.id)}">
       ${thumbHtml(entry, `×${entry.quantity}`,
@@ -1188,6 +1211,7 @@ ui.addBtn.addEventListener("click", addToCollection);
 ui.removeBtn.addEventListener("click", () => state.card && removeFromCollection(state.card.id));
 ui.viewCollectionBtn.addEventListener("click", showCollectionView);
 ui.openFolderBtn.addEventListener("click", openFolder);
+ui.collectionFilter.addEventListener("input", renderCollection);
 
 ui.navCard.addEventListener("click", showCardView);
 ui.brandBtn.addEventListener("click", showCardView);
