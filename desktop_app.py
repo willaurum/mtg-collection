@@ -35,6 +35,31 @@ BACKGROUND = "#0b100d"
 LOCAL_ACCOUNT = "local"
 
 
+class DesktopApi:
+    """Small native bridge for actions the embedded browser cannot do well."""
+
+    def __init__(self):
+        self.window = None
+
+    def save_profile(self, contents, filename):
+        """Ask the owner where to save a profile backup, then write it there."""
+        if self.window is None:
+            return {"ok": False, "error": "The desktop window is not ready."}
+        paths = self.window.create_file_dialog(
+            webview.FileDialog.SAVE,
+            save_filename=os.path.basename(filename or "mtg-profile.json"),
+            file_types=("JSON files (*.json)",),
+        )
+        if not paths:
+            return {"ok": False, "cancelled": True}
+        try:
+            with open(paths[0], "w", encoding="utf-8", newline="\n") as handle:
+                handle.write(str(contents))
+            return {"ok": True, "path": paths[0]}
+        except OSError as exc:
+            return {"ok": False, "error": str(exc)}
+
+
 def config_path():
     import db
     return os.path.join(db.data_dir(), "desktop.json")
@@ -146,11 +171,14 @@ def main():
             print("The local server did not start in time.", file=sys.stderr)
             return 1
 
-    webview.create_window(
+    desktop_api = DesktopApi()
+    window = webview.create_window(
         title, target,
         width=1180, height=800, min_size=(900, 640),
         background_color=BACKGROUND,
+        js_api=desktop_api,
     )
+    desktop_api.window = window
     webview.start()
     return 0
 

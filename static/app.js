@@ -623,11 +623,20 @@ function toggleUnusedCollection() {
 async function exportProfile() {
   try {
     const profile = await getJson("/api/profile/export");
+    const filename = `mtg-profile-${new Date().toISOString().slice(0, 10)}.json`;
+    const contents = JSON.stringify(profile, null, 2);
+    const desktopApi = window.pywebview && window.pywebview.api;
+    if (desktopApi && desktopApi.save_profile) {
+      const result = await desktopApi.save_profile(contents, filename);
+      if (result.cancelled) return setStatus("Profile export cancelled.");
+      if (!result.ok) throw new Error(result.error || "Could not save that profile.");
+      return setStatus(`Profile saved to ${result.path}`);
+    }
     const blob = new Blob([JSON.stringify(profile, null, 2)], { type: "application/json" });
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.href = url;
-    link.download = `mtg-profile-${new Date().toISOString().slice(0, 10)}.json`;
+    link.download = filename;
     document.body.appendChild(link);
     link.click();
     link.remove();
