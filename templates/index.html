@@ -89,7 +89,12 @@
           <svg class="ico"><use href="#i-plus"/></svg>
         </button>
       </div>
-      <ul class="deck-list" id="deckList"></ul>
+      <div class="rail-deck-picker">
+        <button class="rail-deck-btn" id="deckListBtn" type="button" aria-haspopup="menu" aria-expanded="false">
+          <span id="deckListLabel">Choose a deck</span><span class="rail-deck-caret">⌄</span>
+        </button>
+        <div class="rail-deck-menu" id="deckList" role="menu" hidden></div>
+      </div>
       <p class="rail-empty" id="deckListEmpty">No decks yet</p>
     </div>
 

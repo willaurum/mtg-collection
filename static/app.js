@@ -47,7 +47,8 @@ const ui = {
   profileImportDialog: el("profileImportDialog"), profileImportSummary: el("profileImportSummary"),
   profileMergeBtn: el("profileMergeBtn"), profileReplaceBtn: el("profileReplaceBtn"),
   profileImportCancelBtn: el("profileImportCancelBtn"),
-  deckList: el("deckList"), deckListEmpty: el("deckListEmpty"), newDeckBtn: el("newDeckBtn"),
+  deckList: el("deckList"), deckListBtn: el("deckListBtn"), deckListLabel: el("deckListLabel"),
+  deckListEmpty: el("deckListEmpty"), newDeckBtn: el("newDeckBtn"),
   deckPanel: el("deckPanel"), deckName: el("deckName"), deckSummary: el("deckSummary"),
   deckGrid: el("deckGrid"), deckEmpty: el("deckEmpty"), deckFilter: el("deckFilter"),
   deckStats: el("deckStats"),
@@ -968,13 +969,20 @@ const deckName = (id) => (deckById(id) || {}).name || "the deck";
 function renderDeckList() {
   const decks = state.library.decks || [];
   ui.deckListEmpty.hidden = decks.length > 0;
+  const current = deckById(state.deckId);
+  ui.deckListLabel.textContent = current ? current.name : "Choose a deck";
+  ui.deckListBtn.disabled = decks.length === 0;
   ui.deckList.innerHTML = decks.map((deck) => `
-    <li data-id="${escapeHtml(deck.id)}" class="${deck.id === state.deckId ? "active" : ""}">
+    <button data-id="${escapeHtml(deck.id)}" role="menuitem" class="${deck.id === state.deckId ? "active" : ""}">
       <span class="dname">${escapeHtml(deck.name)}</span>
       <span class="dcount">${deck.count}</span>
-    </li>`).join("");
+    </button>`).join("");
   [...ui.deckList.children].forEach((item) => {
-    item.addEventListener("click", () => openDeck(item.dataset.id));
+    item.addEventListener("click", () => {
+      ui.deckList.hidden = true;
+      ui.deckListBtn.setAttribute("aria-expanded", "false");
+      openDeck(item.dataset.id);
+    });
   });
 }
 
@@ -1850,6 +1858,11 @@ ui.importText.addEventListener("input", () => {
 
 ui.addToDeckBtn.addEventListener("click", () => {
   ui.deckPicker.hidden = !ui.deckPicker.hidden;
+});
+ui.deckListBtn.addEventListener("click", () => {
+  const opening = ui.deckList.hidden;
+  ui.deckList.hidden = !opening;
+  ui.deckListBtn.setAttribute("aria-expanded", String(opening));
 });
 ui.newDeckBtn.addEventListener("click", newDeck);
 ui.deleteDeckBtn.addEventListener("click", deleteDeck);
