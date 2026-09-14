@@ -55,7 +55,6 @@ const ui = {
   deckImportCancelBtn: el("deckImportCancelBtn"), deckImportReport: el("deckImportReport"),
   deckImportSummary: el("deckImportSummary"), deckImportItems: el("deckImportItems"),
   deckImportProblemsTitle: el("deckImportProblemsTitle"), deckImportProblems: el("deckImportProblems"),
-  newDeckBtn: el("newDeckBtn"),
   deckPanel: el("deckPanel"), deckName: el("deckName"), deckSummary: el("deckSummary"),
   deckGrid: el("deckGrid"), deckEmpty: el("deckEmpty"), deckFilter: el("deckFilter"),
   deckStats: el("deckStats"),
@@ -1949,7 +1948,6 @@ ui.addToDeckBtn.addEventListener("click", () => {
   ui.deckPicker.hidden = !ui.deckPicker.hidden;
 });
 ui.deckMenuBtn.addEventListener("click", showDeckMenuView);
-ui.newDeckBtn.addEventListener("click", newDeck);
 ui.deckMenuNewBtn.addEventListener("click", newDeck);
 ui.deckImportBtn.addEventListener("click", openDeckImportDialog);
 ui.deckImportCloseBtn.addEventListener("click", closeDeckImportDialog);
