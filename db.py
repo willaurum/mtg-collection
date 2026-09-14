@@ -17,7 +17,7 @@ import sqlite3
 import sys
 import threading
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 5
 
 SCHEMA = """
 CREATE TABLE users (
@@ -181,6 +181,29 @@ def migrate(conn=None):
             "ALTER TABLE deck_cards ADD COLUMN proxy INTEGER NOT NULL DEFAULT 0 "
             "CHECK (proxy IN (0, 1))"
         )
+        current = 2
+    if current < 3:
+        conn.execute("ALTER TABLE decks ADD COLUMN category TEXT NOT NULL DEFAULT ''")
+        current = 3
+    if current < 4:
+        conn.execute(
+            """CREATE TABLE price_snapshots (
+                 user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+                 day TEXT NOT NULL,
+                 collection_value REAL NOT NULL,
+                 PRIMARY KEY (user_id, day)
+               )"""
+        )
+        current = 4
+    if current < 5:
+        conn.execute(
+            """CREATE TABLE price_refreshes (
+                 user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+                 day TEXT NOT NULL,
+                 PRIMARY KEY (user_id, day)
+               )"""
+        )
+        current = 5
     # Later versions add their steps here, guarded by `current < N`.
     conn.execute(
         "INSERT INTO meta (key, value) VALUES ('schema_version', ?) "

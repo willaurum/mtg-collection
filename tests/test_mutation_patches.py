@@ -84,6 +84,9 @@ class MutationPatchTests(unittest.TestCase):
         self.assertEqual(renamed["decks"][0]["name"], "Mono Red")
         self.assertEqual(renamed["entries"][0]["locations"][0]["deck_name"], "Mono Red")
 
+        categorized = self.post("/api/decks/category", {"id": deck_id, "category": "Competitive"})
+        self.assertEqual(categorized["decks"][0]["category"], "Competitive")
+
         deleted = self.post("/api/decks/delete", {"id": deck_id})
         self.assertEqual(deleted["removed_decks"], [deck_id])
         self.assertEqual(deleted["entries"][0]["available"], 1)
@@ -91,6 +94,7 @@ class MutationPatchTests(unittest.TestCase):
     def test_profile_export_import_preserves_cards_and_decks(self):
         store.add_card(self.user_id, card("bolt", "Lightning Bolt"), quantity=2)
         deck_id = store.create_deck(self.user_id, "Burn")
+        store.set_deck_category(self.user_id, deck_id, "Modern")
         store.deck_add(self.user_id, deck_id, "bolt")
         store.set_commander(self.user_id, deck_id, "bolt")
 
@@ -104,6 +108,7 @@ class MutationPatchTests(unittest.TestCase):
         self.assertEqual(report["decks"], 1)
         self.assertEqual(copied["entries"][0]["quantity"], 2)
         self.assertEqual(copied["decks"][0]["name"], "Burn")
+        self.assertEqual(copied["decks"][0]["category"], "Modern")
         self.assertEqual(copied["decks"][0]["cards"][0]["quantity"], 1)
         self.assertEqual(copied["decks"][0]["commander_id"], "bolt")
 
@@ -114,6 +119,12 @@ class MutationPatchTests(unittest.TestCase):
         self.assertEqual([entry["id"] for entry in restored_library["entries"]], ["bolt"])
         self.assertEqual(restored_library["entries"][0]["quantity"], 2)
         self.assertEqual(len(restored_library["decks"]), 1)
+
+    def test_price_history_records_current_collection_value(self):
+        store.add_card(self.user_id, card("bolt", "Lightning Bolt", "3.50"), quantity=2)
+        history = store.price_history(self.user_id)
+        self.assertEqual(history["current"], 7.0)
+        self.assertEqual(history["history"][0]["value"], 7.0)
 
     def test_proxy_and_maybeboard_do_not_consume_owned_copies(self):
         deck_id = self.post("/api/decks/create", {"name": "Test deck"})["deck_id"]

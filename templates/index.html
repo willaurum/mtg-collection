@@ -162,6 +162,7 @@
           <div class="profile-actions">
             <button class="link-btn" id="exportProfileBtn">Export profile</button>
             <button class="link-btn" id="importProfileBtn">Import profile</button>
+            <button class="link-btn" id="priceHistoryBtn">Price history</button>
           </div>
         </div>
         <div class="head-actions collection-toolbar">
@@ -182,6 +183,9 @@
             <button class="btn filter-toggle" id="collectionUnusedBtn" aria-pressed="false">
               Unused only
             </button>
+            <button class="btn filter-toggle" id="collectionFiltersBtn" aria-expanded="false">
+              Filters
+            </button>
             <div class="view-toggle" aria-label="Collection layout">
               <button class="icon-btn active" id="collectionGridBtn" title="Card grid view"
                       aria-label="Card grid view" aria-pressed="true">
@@ -197,6 +201,39 @@
         </div>
       </header>
       <div class="view-body">
+        <section class="collection-filter-panel" id="collectionFiltersPanel" hidden aria-label="Collection filters">
+          <div class="filter-group"><span>Availability</span><div class="filter-chips">
+            <button data-collection-filter="availability" data-value="all">Any</button>
+            <button data-collection-filter="availability" data-value="free">Free copies</button>
+            <button data-collection-filter="availability" data-value="allocated">In decks</button>
+          </div></div>
+          <div class="filter-group"><span>Colour</span><div class="filter-chips">
+            <button data-collection-filter="color" data-value="all">Any</button>
+            <button data-collection-filter="color" data-value="W">W</button>
+            <button data-collection-filter="color" data-value="U">U</button>
+            <button data-collection-filter="color" data-value="B">B</button>
+            <button data-collection-filter="color" data-value="R">R</button>
+            <button data-collection-filter="color" data-value="G">G</button>
+            <button data-collection-filter="color" data-value="colorless">Colourless</button>
+          </div></div>
+          <div class="filter-group"><span>Type</span><div class="filter-chips">
+            <button data-collection-filter="type" data-value="all">Any</button>
+            <button data-collection-filter="type" data-value="creature">Creature</button>
+            <button data-collection-filter="type" data-value="instant">Instant</button>
+            <button data-collection-filter="type" data-value="sorcery">Sorcery</button>
+            <button data-collection-filter="type" data-value="artifact">Artifact</button>
+            <button data-collection-filter="type" data-value="enchantment">Enchantment</button>
+            <button data-collection-filter="type" data-value="land">Land</button>
+            <button data-collection-filter="type" data-value="planeswalker">Planeswalker</button>
+          </div></div>
+          <div class="filter-group"><span>Rarity</span><div class="filter-chips">
+            <button data-collection-filter="rarity" data-value="all">Any</button>
+            <button data-collection-filter="rarity" data-value="common">Common</button>
+            <button data-collection-filter="rarity" data-value="uncommon">Uncommon</button>
+            <button data-collection-filter="rarity" data-value="rare">Rare</button>
+            <button data-collection-filter="rarity" data-value="mythic">Mythic</button>
+          </div></div>
+        </section>
         <div class="coll-grid" id="collGrid"></div>
         <p class="empty" id="collEmpty" hidden>
           Nothing saved yet — find a card and press <b>Add to collection</b>, or
@@ -267,10 +304,13 @@
                    aria-label="Deck name">
             <span class="legality" id="deckLegality" hidden></span>
           </div>
+          <input id="deckCategory" class="deck-category" maxlength="60" spellcheck="false"
+                 placeholder="Folder / category (optional)" aria-label="Deck folder or category">
           <p class="sub" id="deckSummary">&nbsp;</p>
           <p class="deck-problems" id="deckProblems" hidden></p>
         </div>
         <div class="head-actions">
+          <button class="btn quiet" id="deckExportBtn">Export deck</button>
           <button class="btn quiet" id="proxyListBtn" hidden>Proxies</button>
           <button class="btn quiet danger" id="deleteDeckBtn">Delete deck</button>
         </div>
@@ -345,6 +385,16 @@
       </button>
     </div>
     <button class="btn quiet" id="profileImportCancelBtn">Cancel</button>
+  </section>
+</div>
+
+<div class="price-history-overlay" id="priceHistoryDialog" hidden>
+  <section class="price-history-dialog" role="dialog" aria-modal="true" aria-labelledby="priceHistoryTitle">
+    <button class="detail-close" id="priceHistoryCloseBtn" aria-label="Close">×</button>
+    <h2 id="priceHistoryTitle">Collection value</h2>
+    <p class="price-current" id="priceHistoryCurrent">$0.00</p>
+    <p class="sub" id="priceHistoryChange">Your daily history will appear here.</p>
+    <ul class="price-history-list" id="priceHistoryList"></ul>
   </section>
 </div>
 

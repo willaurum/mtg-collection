@@ -42,7 +42,11 @@ const ui = {
   collectionFilter: el("collectionFilter"),
   collectionSort: el("collectionSort"), collectionGridBtn: el("collectionGridBtn"),
   collectionListBtn: el("collectionListBtn"), collectionUnusedBtn: el("collectionUnusedBtn"),
+  collectionFiltersBtn: el("collectionFiltersBtn"), collectionFiltersPanel: el("collectionFiltersPanel"),
   exportProfileBtn: el("exportProfileBtn"), importProfileBtn: el("importProfileBtn"),
+  priceHistoryBtn: el("priceHistoryBtn"), priceHistoryDialog: el("priceHistoryDialog"),
+  priceHistoryCloseBtn: el("priceHistoryCloseBtn"), priceHistoryCurrent: el("priceHistoryCurrent"),
+  priceHistoryChange: el("priceHistoryChange"), priceHistoryList: el("priceHistoryList"),
   profileImportFile: el("profileImportFile"),
   profileImportDialog: el("profileImportDialog"), profileImportSummary: el("profileImportSummary"),
   profileMergeBtn: el("profileMergeBtn"), profileReplaceBtn: el("profileReplaceBtn"),
@@ -56,6 +60,7 @@ const ui = {
   deckImportSummary: el("deckImportSummary"), deckImportItems: el("deckImportItems"),
   deckImportProblemsTitle: el("deckImportProblemsTitle"), deckImportProblems: el("deckImportProblems"),
   deckPanel: el("deckPanel"), deckName: el("deckName"), deckSummary: el("deckSummary"),
+  deckCategory: el("deckCategory"), deckExportBtn: el("deckExportBtn"),
   deckGrid: el("deckGrid"), deckEmpty: el("deckEmpty"), deckFilter: el("deckFilter"),
   deckStats: el("deckStats"),
   availList: el("availList"), availEmpty: el("availEmpty"),
@@ -112,6 +117,7 @@ const state = {
   collectionView: readPreference("mtg.collection-view", "grid"),
   collectionSort: readPreference("mtg.collection-sort", "name"),
   unusedOnly: readPreference("mtg.collection-unused", "0") === "1",
+  collectionFilters: { availability: "all", color: "all", type: "all", rarity: "all" },
   commandItems: [],
   commandIndex: 0,
   pendingProfile: null,
@@ -638,10 +644,21 @@ function renderCollection() {
   hideCardPreview();
   const allEntries = state.library.entries || [];
   const terms = ui.collectionFilter.value.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+  const filters = state.collectionFilters;
   const entries = allEntries
     .filter((entry) => {
       const text = collectionSearchText(entry);
-      return terms.every((term) => text.includes(term)) &&
+      const card = entry.card || {};
+      const colours = card.color_identity || card.colors || [];
+      const availability = filters.availability === "all" ||
+        (filters.availability === "free" && (entry.available || 0) > 0) ||
+        (filters.availability === "allocated" && (entry.allocated || 0) > 0);
+      const type = filters.type === "all" ||
+        (card.type_line || "").toLocaleLowerCase().includes(filters.type);
+      const rarity = filters.rarity === "all" || card.rarity === filters.rarity;
+      const colour = filters.color === "all" ||
+        (filters.color === "colorless" ? colours.length === 0 : colours.includes(filters.color));
+      return terms.every((term) => text.includes(term)) && availability && type && rarity && colour &&
         (!state.unusedOnly || (entry.allocated || 0) === 0);
     })
     .sort(collectionComparator(ui.collectionSort.value));
@@ -652,13 +669,19 @@ function renderCollection() {
   ui.collectionListBtn.setAttribute("aria-pressed", state.collectionView === "list");
   ui.collectionUnusedBtn.classList.toggle("active", state.unusedOnly);
   ui.collectionUnusedBtn.setAttribute("aria-pressed", state.unusedOnly);
+  ui.collectionFiltersBtn.classList.toggle("active", !ui.collectionFiltersPanel.hidden);
+  ui.collectionFiltersBtn.setAttribute("aria-expanded", String(!ui.collectionFiltersPanel.hidden));
+  ui.collectionFiltersPanel.querySelectorAll("[data-collection-filter]").forEach((button) => {
+    const { collectionFilter, value } = button.dataset;
+    button.classList.toggle("active", filters[collectionFilter] === value);
+  });
   ui.collEmpty.hidden = entries.length > 0;
   if (!entries.length) {
     const noUnused = !allEntries.some((entry) => (entry.allocated || 0) === 0);
     ui.collEmpty.textContent = allEntries.length
       ? (state.unusedOnly && noUnused
         ? "Every card is allocated to a deck."
-        : "No cards match that name or rules-text search.")
+        : "No cards match the current search and filters.")
       : "Nothing saved yet — find a card and add it to the collection, or import a list.";
   }
   ui.collGrid.innerHTML = entries.map((entry) => `
@@ -697,6 +720,17 @@ function toggleUnusedCollection() {
   renderCollection();
 }
 
+function toggleCollectionFilters() {
+  ui.collectionFiltersPanel.hidden = !ui.collectionFiltersPanel.hidden;
+  renderCollection();
+}
+
+function setCollectionFilter(kind, value) {
+  if (!(kind in state.collectionFilters)) return;
+  state.collectionFilters[kind] = value;
+  renderCollection();
+}
+
 async function exportProfile() {
   try {
     const profile = await getJson("/api/profile/export");
@@ -719,6 +753,33 @@ async function exportProfile() {
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     setStatus("Profile exported — keep the file somewhere safe.");
+  } catch (error) {
+    setStatus(error.message, true);
+  }
+}
+
+function money(value) {
+  return `$${(Number(value) || 0).toFixed(2)}`;
+}
+
+async function openPriceHistory() {
+  try {
+    const data = await getJson("/api/prices/history");
+    const history = data.history || [];
+    ui.priceHistoryCurrent.textContent = money(data.current);
+    const previous = history[1];
+    const refreshNote = data.stale
+      ? " Showing the last cached prices."
+      : data.refreshed ? " Prices refreshed today." : "";
+    if (previous) {
+      const difference = (Number(data.current) || 0) - (Number(previous.value) || 0);
+      ui.priceHistoryChange.textContent = `${difference >= 0 ? "+" : "−"}${money(Math.abs(difference))} since ${previous.day}.${refreshNote}`;
+    } else {
+      ui.priceHistoryChange.textContent = `Tracking starts today; prices refresh once daily when you open this view.${refreshNote}`;
+    }
+    ui.priceHistoryList.innerHTML = history.map((point) => `
+      <li><time datetime="${escapeHtml(point.day)}">${escapeHtml(point.day)}</time><strong>${money(point.value)}</strong></li>`).join("");
+    ui.priceHistoryDialog.hidden = false;
   } catch (error) {
     setStatus(error.message, true);
   }
@@ -1052,12 +1113,26 @@ const deckName = (id) => (deckById(id) || {}).name || "the deck";
 function renderDeckList() {
   const decks = state.library.decks || [];
   ui.deckListEmpty.hidden = decks.length > 0;
-  ui.deckList.innerHTML = decks.map((deck) => `
-    <button class="deck-directory-card" data-id="${escapeHtml(deck.id)}">
-      <span class="deck-directory-title">${escapeHtml(deck.name)}</span>
-      <span class="deck-directory-meta">${deck.count} main cards · ${deck.maybeboard_count || 0} maybeboard · ${deck.cards.length} unique</span>
-    </button>`).join("");
-  [...ui.deckList.children].forEach((item) => {
+  const folders = new Map();
+  decks.forEach((deck) => {
+    const folder = deck.category || "Uncategorized";
+    if (!folders.has(folder)) folders.set(folder, []);
+    folders.get(folder).push(deck);
+  });
+  ui.deckList.innerHTML = [...folders.entries()].sort(([a], [b]) => {
+    if (a === "Uncategorized") return 1;
+    if (b === "Uncategorized") return -1;
+    return a.localeCompare(b);
+  }).map(([folder, items]) => `
+    <section class="deck-folder">
+      <h2>${escapeHtml(folder)}</h2>
+      <div class="deck-folder-cards">${items.map((deck) => `
+        <button class="deck-directory-card" data-id="${escapeHtml(deck.id)}">
+          <span class="deck-directory-title">${escapeHtml(deck.name)}</span>
+          <span class="deck-directory-meta">${deck.count} main cards · ${deck.maybeboard_count || 0} maybeboard · ${deck.cards.length} unique</span>
+        </button>`).join("")}</div>
+    </section>`).join("");
+  ui.deckList.querySelectorAll(".deck-directory-card").forEach((item) => {
     item.addEventListener("click", () => openDeck(item.dataset.id));
   });
 }
@@ -1211,6 +1286,7 @@ function renderDeckPanel() {
   if (!deck) return showCollectionView();
 
   if (document.activeElement !== ui.deckName) ui.deckName.value = deck.name;
+  if (document.activeElement !== ui.deckCategory) ui.deckCategory.value = deck.category || "";
   state.problems = deckProblems(deck);
   renderDeckSummary(deck);
   renderDeckStats(deck);
@@ -1502,6 +1578,39 @@ function showCollectionView() {
 
 function showCardView() {
   showView(ui.cardPanel, "card");
+}
+
+function setDeckCategory() {
+  const deck = deckById(state.deckId);
+  const category = ui.deckCategory.value.trim();
+  if (!deck || category === (deck.category || "")) return;
+  mutate("/api/decks/category", { id: state.deckId, category }, () =>
+    category ? `Moved to ${category}.` : "Moved to Uncategorized.");
+}
+
+function exportDeck() {
+  const deck = deckById(state.deckId);
+  if (!deck) return;
+  const main = deck.cards.filter((line) => line.zone === "main");
+  const commander = main.filter((line) => line.card_id === deck.commander_id);
+  const cards = main.filter((line) => line.card_id !== deck.commander_id);
+  const sortLines = (lines) => [...lines].sort((a, b) => lineName(a).localeCompare(lineName(b)));
+  const asLine = (line) => `${line.quantity} ${lineName(line)}`;
+  const sections = [`// ${deck.name}`];
+  if (commander.length) sections.push("", "Commander", ...sortLines(commander).map(asLine));
+  sections.push("", "Deck", ...sortLines(cards).map(asLine));
+  const maybeboard = deck.cards.filter((line) => line.zone === "maybeboard");
+  if (maybeboard.length) sections.push("", "Maybeboard", ...sortLines(maybeboard).map(asLine));
+  const filename = `${deck.name.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "deck"}.txt`;
+  const url = URL.createObjectURL(new Blob([sections.join("\n") + "\n"], { type: "text/plain" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  setStatus(`${deck.name} exported.`);
 }
 
 function showDeckMenuView() {
@@ -1908,8 +2017,18 @@ ui.collectionSort.addEventListener("change", setCollectionSort);
 ui.collectionGridBtn.addEventListener("click", () => setCollectionView("grid"));
 ui.collectionListBtn.addEventListener("click", () => setCollectionView("list"));
 ui.collectionUnusedBtn.addEventListener("click", toggleUnusedCollection);
+ui.collectionFiltersBtn.addEventListener("click", toggleCollectionFilters);
+ui.collectionFiltersPanel.querySelectorAll("[data-collection-filter]").forEach((button) => {
+  button.addEventListener("click", () =>
+    setCollectionFilter(button.dataset.collectionFilter, button.dataset.value));
+});
 ui.exportProfileBtn.addEventListener("click", exportProfile);
 ui.importProfileBtn.addEventListener("click", () => ui.profileImportFile.click());
+ui.priceHistoryBtn.addEventListener("click", openPriceHistory);
+ui.priceHistoryCloseBtn.addEventListener("click", () => { ui.priceHistoryDialog.hidden = true; });
+ui.priceHistoryDialog.addEventListener("click", (event) => {
+  if (event.target === ui.priceHistoryDialog) ui.priceHistoryDialog.hidden = true;
+});
 ui.profileImportFile.addEventListener("change", (event) => {
   readProfileFile(event.target.files[0]);
   event.target.value = "";
@@ -1964,6 +2083,7 @@ ui.deckImportDialog.querySelectorAll("[data-deck-import-mode]").forEach((button)
   button.addEventListener("click", () => commitDeckImport(button.dataset.deckImportMode));
 });
 ui.deleteDeckBtn.addEventListener("click", deleteDeck);
+ui.deckExportBtn.addEventListener("click", exportDeck);
 ui.proxyListBtn.addEventListener("click", openProxyList);
 ui.deckFilter.addEventListener("input", () => {
   state.deckSearchCard = null;
@@ -1996,6 +2116,15 @@ ui.deckName.addEventListener("keydown", (event) => {
     const deck = deckById(state.deckId);
     if (deck) ui.deckName.value = deck.name;
     ui.deckName.blur();
+  }
+});
+ui.deckCategory.addEventListener("change", setDeckCategory);
+ui.deckCategory.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") ui.deckCategory.blur();
+  else if (event.key === "Escape") {
+    const deck = deckById(state.deckId);
+    if (deck) ui.deckCategory.value = deck.category || "";
+    ui.deckCategory.blur();
   }
 });
 

@@ -194,6 +194,28 @@ def api_library():
     return _library()
 
 
+@app.get("/api/prices/history")
+@auth.api_login_required
+def api_price_history():
+    user_id = auth.user_id()
+    refreshed = False
+    stale = False
+    if store.price_refresh_due(user_id):
+        try:
+            cards, _missing = scryfall.cards_by_identifiers(
+                [{"id": card_id} for card_id in store.collection_card_ids(user_id)]
+            )
+            store.refresh_collection_prices(user_id, cards)
+            refreshed = True
+        except scryfall.ScryfallError:
+            # A history based on the last cached prices is still more helpful
+            # than an error modal when the Pi temporarily has no internet.
+            stale = True
+    payload = store.price_history(user_id)
+    payload.update({"refreshed": refreshed, "stale": stale})
+    return jsonify(payload)
+
+
 @app.get("/api/profile/export")
 @auth.api_login_required
 def api_profile_export():
@@ -258,6 +280,16 @@ def api_deck_rename():
         auth.user_id(), deck_id, payload.get("name")),
         lambda changed_id: {"entry_ids": store.deck_card_ids(auth.user_id(), changed_id),
                             "deck_ids": [changed_id], "deck_id": changed_id})
+
+
+@app.post("/api/decks/category")
+@auth.api_login_required
+def api_deck_category():
+    payload = request.get_json(silent=True) or {}
+    deck_id = payload.get("id")
+    return _store_call(lambda: store.set_deck_category(
+        auth.user_id(), deck_id, payload.get("category")),
+        lambda changed_id: {"deck_ids": [changed_id], "deck_id": changed_id})
 
 
 @app.post("/api/decks/delete")

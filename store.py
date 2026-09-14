@@ -37,6 +37,10 @@ def _clean_name(name):
     return " ".join(str(name or "").split())[:MAX_NAME] or DEFAULT_DECK_NAME
 
 
+def _clean_category(category):
+    return " ".join(str(category or "").split())[:MAX_NAME]
+
+
 # ------------------------------------------------------------ card cache
 
 def remember_card(card, conn=None):
@@ -281,6 +285,14 @@ def rename_deck(user_id, deck_id, name):
     return deck_id
 
 
+def set_deck_category(user_id, deck_id, category):
+    with db.transaction() as conn:
+        _owned_deck(conn, user_id, deck_id)
+        conn.execute("UPDATE decks SET category = ?, updated = ? WHERE id = ?",
+                     (_clean_category(category), _now(), deck_id))
+    return deck_id
+
+
 def delete_deck(user_id, deck_id):
     """Deleting a deck releases every copy it held back to the collection."""
     with db.transaction() as conn:
@@ -461,6 +473,64 @@ def move_deck_card(user_id, deck_id, card_id, zone):
 
 # --------------------------------------------------------------- library
 
+def _collection_value(user_id, conn):
+    return conn.execute(
+        """SELECT COALESCE(SUM(c.quantity *
+               CAST(json_extract(k.data, '$.prices.usd') AS REAL)), 0) AS total
+             FROM collection c JOIN cards k ON k.id = c.card_id
+            WHERE c.user_id = ?""", (user_id,)
+    ).fetchone()["total"]
+
+
+def record_price_snapshot(user_id, conn=None):
+    conn = conn or db.connect()
+    value = float(_collection_value(user_id, conn) or 0)
+    conn.execute(
+        """INSERT INTO price_snapshots (user_id, day, collection_value) VALUES (?, ?, ?)
+           ON CONFLICT (user_id, day) DO UPDATE SET collection_value = excluded.collection_value""",
+        (user_id, datetime.date.today().isoformat(), value))
+    return value
+
+
+def price_history(user_id, conn=None):
+    conn = conn or db.connect()
+    current = record_price_snapshot(user_id, conn)
+    rows = conn.execute(
+        """SELECT day, collection_value FROM price_snapshots WHERE user_id = ?
+           ORDER BY day DESC LIMIT 60""", (user_id,)).fetchall()
+    return {"current": current, "history": [
+        {"day": row["day"], "value": float(row["collection_value"])} for row in rows
+    ]}
+
+
+def price_refresh_due(user_id, conn=None):
+    conn = conn or db.connect()
+    row = conn.execute(
+        "SELECT 1 FROM price_refreshes WHERE user_id = ? AND day = ?",
+        (user_id, datetime.date.today().isoformat()),
+    ).fetchone()
+    return row is None
+
+
+def collection_card_ids(user_id, conn=None):
+    conn = conn or db.connect()
+    return [row["card_id"] for row in conn.execute(
+        "SELECT card_id FROM collection WHERE user_id = ? ORDER BY card_id", (user_id,)
+    )]
+
+
+def refresh_collection_prices(user_id, cards):
+    """Save fresh Scryfall payloads, then mark this user's daily refresh complete."""
+    with db.transaction() as conn:
+        for card in cards:
+            remember_card(card, conn)
+        conn.execute(
+            "INSERT OR IGNORE INTO price_refreshes (user_id, day) VALUES (?, ?)",
+            (user_id, datetime.date.today().isoformat()),
+        )
+        record_price_snapshot(user_id, conn)
+
+
 def summary(user_id, conn=None):
     """Small aggregate for the library header, without loading every card."""
     conn = conn or db.connect()
@@ -473,12 +543,7 @@ def summary(user_id, conn=None):
              FROM deck_cards dc JOIN decks d ON d.id = dc.deck_id
             WHERE d.user_id = ? AND dc.zone = 'main' AND dc.proxy = 0""", (user_id,)
     ).fetchone()["total"]
-    value = conn.execute(
-        """SELECT COALESCE(SUM(c.quantity *
-                   CAST(json_extract(k.data, '$.prices.usd') AS REAL)), 0) AS total
-             FROM collection c JOIN cards k ON k.id = c.card_id
-            WHERE c.user_id = ?""", (user_id,)
-    ).fetchone()["total"]
+    value = _collection_value(user_id, conn)
     total = int(owned["total"])
     allocated = int(allocated)
     return {
@@ -530,7 +595,8 @@ def deck_state(user_id, deck_id, conn=None):
               "missing": bool(card["missing"]), "card": card_json(card)} for card in cards]
     return {
         "id": row["id"], "name": row["name"], "created": row["created"],
-        "updated": row["updated"], "commander_id": row["commander_id"],
+        "updated": row["updated"], "category": row["category"],
+        "commander_id": row["commander_id"],
         "cards": lines,
         "count": sum(line["quantity"] for line in lines if line["zone"] == "main"),
         "maybeboard_count": sum(line["quantity"] for line in lines if line["zone"] == "maybeboard"),
@@ -544,11 +610,13 @@ def patch(user_id, entry_ids=(), deck_ids=()):
                if (item := entry_state(user_id, card_id, conn)) is not None]
     decks = [deck for deck_id in dict.fromkeys(deck_ids)
              if (deck := deck_state(user_id, deck_id, conn)) is not None]
+    record_price_snapshot(user_id, conn)
     return {"entries": entries, "decks": decks, "summary": summary(user_id, conn)}
 
 def library(user_id):
     """One consistent snapshot: collection, decks, and who holds what."""
     conn = db.connect()
+    record_price_snapshot(user_id, conn)
     owned = entries(user_id, conn)
     spread = _allocations(conn, user_id)
     for item in owned:
@@ -584,6 +652,7 @@ def export_profile(user_id):
         "decks": [
             {
                 "name": deck["name"],
+                "category": deck["category"],
                 "commander_id": deck["commander_id"],
                 "cards": deck["cards"],
             }
@@ -653,9 +722,10 @@ def import_profile(user_id, profile, mode="merge"):
             deck_id = uuid.uuid4().hex
             now = _now()
             conn.execute(
-                """INSERT INTO decks (id, user_id, name, commander_id, created, updated)
-                   VALUES (?, ?, ?, NULL, ?, ?)""",
-                (deck_id, user_id, _clean_name(source_deck.get("name")), now, now),
+                """INSERT INTO decks (id, user_id, name, category, commander_id, created, updated)
+                   VALUES (?, ?, ?, ?, NULL, ?, ?)""",
+                (deck_id, user_id, _clean_name(source_deck.get("name")),
+                 _clean_category(source_deck.get("category")), now, now),
             )
             held_ids = set()
             for line in source_deck["cards"]:
