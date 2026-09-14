@@ -258,7 +258,8 @@
     <section class="view" id="deckMenuPanel" hidden>
       <header class="view-head">
         <div><h1>Decks</h1><p class="sub">Choose a deck to build, inspect, and manage.</p></div>
-        <button class="btn primary" id="deckMenuNewBtn">New deck</button>
+        <div class="head-actions"><button class="btn" id="deckImportBtn">Import deck</button>
+          <button class="btn primary" id="deckMenuNewBtn">New deck</button></div>
       </header>
       <div class="view-body">
         <div class="deck-directory" id="deckList"></div>
@@ -377,6 +378,33 @@
       <button class="detail-close" id="proxyCloseBtn" aria-label="Close">×</button></div>
     <ul class="proxy-list" id="proxyList"></ul>
     <p class="empty" id="proxyEmpty" hidden>No proxies in this deck.</p>
+  </section>
+</div>
+
+<div class="deck-import-overlay" id="deckImportDialog" hidden>
+  <section class="deck-import-dialog" role="dialog" aria-modal="true" aria-labelledby="deckImportTitle">
+    <button class="detail-close" id="deckImportCloseBtn" aria-label="Close">×</button>
+    <h2 id="deckImportTitle">Import deck</h2>
+    <p class="sub">Paste a decklist first. Nothing changes until you choose how to use your collection.</p>
+    <input class="mini-input" id="deckImportName" maxlength="60" placeholder="Deck name" spellcheck="false">
+    <textarea id="deckImportText" spellcheck="false" placeholder="1 Sol Ring
+1 Command Tower
+1 Lightning Bolt"></textarea>
+    <div class="import-actions"><button class="btn primary" id="deckImportPreviewBtn">Preview deck</button>
+      <button class="btn quiet" id="deckImportCancelBtn">Cancel</button></div>
+    <section class="deck-import-report" id="deckImportReport" hidden>
+      <p id="deckImportSummary"></p>
+      <ul class="report-list" id="deckImportItems"></ul>
+      <h3 class="report-sub" id="deckImportProblemsTitle" hidden>Not imported</h3>
+      <ul class="report-list problems" id="deckImportProblems"></ul>
+      <h3 class="deck-import-choice-title">How should this deck use your cards?</h3>
+      <div class="deck-import-choices">
+        <button data-deck-import-mode="collection"><b>Use collection only</b><span>Add only lines whose full quantity is free; skip the rest.</span></button>
+        <button data-deck-import-mode="add_missing"><b>Add missing copies</b><span>Add only the shortfall to your collection, then build the complete deck.</span></button>
+        <button data-deck-import-mode="prefer_collection"><b>Prefer collection, proxy the rest</b><span>Use free copies when possible; otherwise add that printing as a proxy.</span></button>
+        <button data-deck-import-mode="proxies"><b>Import all as proxies</b><span>Build the whole deck without changing your collection.</span></button>
+      </div>
+    </section>
   </section>
 </div>
 

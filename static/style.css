@@ -1241,6 +1241,12 @@ kbd {
 .profile-choice.danger b { color: var(--danger); }
 .profile-choice.danger:hover { border-color: rgba(224, 115, 106, 0.5); }
 
+/* ------------------------------------------------------------ deck import */
+
+.deck-import-overlay { position: fixed; z-index: 53; inset: 0; display: grid; place-items: center; padding: 22px; background: rgba(4, 8, 5, .74); backdrop-filter: blur(3px); }
+.deck-import-overlay[hidden] { display: none !important; }
+.deck-import-dialog { position: relative; width: min(680px, 100%); max-height: min(820px, 92vh); overflow: auto; padding: 24px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--surface); box-shadow: 0 22px 60px rgba(0, 0, 0, .62); }.deck-import-dialog h2 { margin: 0; font: 500 22px var(--display); }.deck-import-dialog > .sub { margin: 6px 0 15px; }.deck-import-dialog .mini-input { width: 100%; }.deck-import-dialog textarea { display: block; width: 100%; min-height: 180px; margin-top: 10px; resize: vertical; }.deck-import-report { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }.deck-import-report > p { margin: 0 0 9px; color: var(--dim); font-size: 12px; }.deck-import-report .report-list li > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.deck-import-report .report-list li > small { margin-left: auto; color: var(--faint); white-space: nowrap; }.deck-import-choice-title { margin: 18px 0 9px; color: var(--gold); font: 600 11px var(--sans); }.deck-import-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }.deck-import-choices button { display: grid; gap: 4px; min-height: 92px; padding: 12px; border: 1px solid var(--line); border-radius: var(--r); background: var(--sunken); color: var(--text); cursor: pointer; text-align: left; }.deck-import-choices button:hover { border-color: var(--bronze); background: var(--elevate); }.deck-import-choices b { font: 600 12px var(--sans); }.deck-import-choices span { color: var(--dim); font-size: 10.5px; line-height: 1.45; }
+
 /* ------------------------------------------------------------ card detail */
 
 .card-detail-overlay, .proxy-overlay { position: fixed; z-index: 52; inset: 0; display: grid; place-items: center; padding: 22px; background: rgba(4, 8, 5, .74); backdrop-filter: blur(3px); }.card-detail-overlay[hidden], .proxy-overlay[hidden] { display: none !important; }
@@ -1298,6 +1304,7 @@ kbd {
   .collection-toolbar { width: 100%; }
   .collection-search-row .collection-filter { width: auto; flex: 1; }
   .collection-control-row { justify-content: flex-start; flex-wrap: wrap; }
+  .deck-import-choices { grid-template-columns: 1fr; }
   .card-preview { display: none; }
   .card-detail-dialog { grid-template-columns: 1fr; }
   .detail-card-art { width: min(210px, 54vw); padding-bottom: 0; }

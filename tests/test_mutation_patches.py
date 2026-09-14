@@ -156,6 +156,26 @@ class MutationPatchTests(unittest.TestCase):
         self.assertEqual(moved["summary"]["allocated"], 1)
         self.assertEqual(moved["entries"][0]["available"], 0)
 
+    def test_deck_import_can_reserve_owned_cards_or_add_missing_copies(self):
+        store.add_card(self.user_id, card("bolt", "Lightning Bolt"), quantity=1)
+        resolved = [
+            {"card": card("bolt", "Lightning Bolt"), "entry": {"quantity": 1}},
+            {"card": card("borrowed", "Borrowed Card"), "entry": {"quantity": 2}},
+        ]
+
+        imported = store.import_deck(self.user_id, "Imported", resolved, "prefer_collection")
+        deck = store.deck_state(self.user_id, imported["deck_id"])
+        lines = {line["card_id"]: line for line in deck["cards"]}
+        self.assertFalse(lines["bolt"]["proxy"])
+        self.assertTrue(lines["borrowed"]["proxy"])
+        self.assertEqual(imported["owned"], 1)
+        self.assertEqual(imported["proxies"], 2)
+
+        added = store.import_deck(self.user_id, "Owned import", resolved, "add_missing")
+        owned_deck = store.deck_state(self.user_id, added["deck_id"])
+        self.assertTrue(all(not line["proxy"] for line in owned_deck["cards"]))
+        self.assertEqual(added["added_to_collection"], 3)
+
 
 if __name__ == "__main__":
     unittest.main()

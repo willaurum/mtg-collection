@@ -324,6 +324,7 @@ def api_deck_move():
 # Preview resolves a list against Scryfall; the commit reuses that work.
 # Tokens are namespaced by user so one account can never commit another's.
 _pending_imports = collections_abc.OrderedDict()
+_pending_deck_imports = collections_abc.OrderedDict()
 MAX_PENDING_IMPORTS = 12
 
 
@@ -361,6 +362,43 @@ def api_import_commit():
         return jsonify({"error": "Import failed: %s" % exc}), 500
     return _patch_response(
         entry_ids=[item["card"]["id"] for item in resolved], imported=added)
+
+
+@app.post("/api/decks/import/preview")
+@auth.api_login_required
+def api_deck_import_preview():
+    text = (request.get_json(silent=True) or {}).get("text") or ""
+    try:
+        report, resolved = importer.preview(text)
+    except importer.ImportError_ as exc:
+        return jsonify({"error": str(exc)}), 400
+    except scryfall.ScryfallError as exc:
+        return jsonify({"error": "Scryfall could not be reached: %s" % exc}), 502
+
+    token = uuid.uuid4().hex
+    _pending_deck_imports[(auth.user_id(), token)] = resolved
+    while len(_pending_deck_imports) > MAX_PENDING_IMPORTS:
+        _pending_deck_imports.popitem(last=False)
+    report["token"] = token
+    return jsonify(report)
+
+
+@app.post("/api/decks/import/commit")
+@auth.api_login_required
+def api_deck_import_commit():
+    payload = request.get_json(silent=True) or {}
+    token = payload.get("token")
+    resolved = _pending_deck_imports.pop((auth.user_id(), token), None)
+    if resolved is None:
+        return jsonify({"error": "That deck preview has expired - preview again."}), 409
+    try:
+        report = store.import_deck(auth.user_id(), payload.get("name"), resolved,
+                                   payload.get("mode"))
+    except store.StoreError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except (OSError, ValueError) as exc:
+        return jsonify({"error": "Deck import failed: %s" % exc}), 500
+    return _library(imported_deck=report)
 
 
 @app.post("/api/collection/open")

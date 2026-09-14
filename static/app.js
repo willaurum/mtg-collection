@@ -48,7 +48,14 @@ const ui = {
   profileMergeBtn: el("profileMergeBtn"), profileReplaceBtn: el("profileReplaceBtn"),
   profileImportCancelBtn: el("profileImportCancelBtn"),
   deckList: el("deckList"), deckListEmpty: el("deckListEmpty"), deckMenuBtn: el("deckMenuBtn"),
-  deckMenuPanel: el("deckMenuPanel"), deckMenuNewBtn: el("deckMenuNewBtn"), newDeckBtn: el("newDeckBtn"),
+  deckMenuPanel: el("deckMenuPanel"), deckMenuNewBtn: el("deckMenuNewBtn"),
+  deckImportBtn: el("deckImportBtn"), deckImportDialog: el("deckImportDialog"),
+  deckImportCloseBtn: el("deckImportCloseBtn"), deckImportName: el("deckImportName"),
+  deckImportText: el("deckImportText"), deckImportPreviewBtn: el("deckImportPreviewBtn"),
+  deckImportCancelBtn: el("deckImportCancelBtn"), deckImportReport: el("deckImportReport"),
+  deckImportSummary: el("deckImportSummary"), deckImportItems: el("deckImportItems"),
+  deckImportProblemsTitle: el("deckImportProblemsTitle"), deckImportProblems: el("deckImportProblems"),
+  newDeckBtn: el("newDeckBtn"),
   deckPanel: el("deckPanel"), deckName: el("deckName"), deckSummary: el("deckSummary"),
   deckGrid: el("deckGrid"), deckEmpty: el("deckEmpty"), deckFilter: el("deckFilter"),
   deckStats: el("deckStats"),
@@ -114,6 +121,7 @@ const state = {
   deckSuggestionNames: [],
   deckSuggestTimer: null,
   deckSuggestSeq: 0,
+  deckImportToken: null,
 };
 
 ui.collectionSort.value = state.collectionSort;
@@ -797,6 +805,68 @@ function showCardPreview(cardOrId, anchor) {
   const top = Math.max(12, Math.min(rect.top, window.innerHeight - height - 12));
   ui.cardPreview.style.left = `${left}px`;
   ui.cardPreview.style.top = `${top}px`;
+}
+
+function closeDeckImportDialog() {
+  ui.deckImportDialog.hidden = true;
+  state.deckImportToken = null;
+}
+
+function openDeckImportDialog() {
+  state.deckImportToken = null;
+  ui.deckImportName.value = "";
+  ui.deckImportText.value = "";
+  ui.deckImportReport.hidden = true;
+  ui.deckImportItems.innerHTML = "";
+  ui.deckImportProblems.innerHTML = "";
+  ui.deckImportDialog.hidden = false;
+  ui.deckImportName.focus();
+}
+
+function deckImportItemHtml(item) {
+  const printing = [item.set && String(item.set).toUpperCase(), item.collector_number && `#${item.collector_number}`]
+    .filter(Boolean).join(" ");
+  return `<li><span>${escapeHtml(item.name)}</span><small>×${item.quantity}${printing ? ` · ${escapeHtml(printing)}` : ""}</small></li>`;
+}
+
+async function previewDeckImport() {
+  try {
+    const report = await getJson("/api/decks/import/preview", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: ui.deckImportText.value }),
+    });
+    state.deckImportToken = report.token;
+    ui.deckImportSummary.textContent = `${report.total} cards · ${report.unique} unique printing${report.unique === 1 ? "" : "s"} resolved`;
+    ui.deckImportItems.innerHTML = (report.items || []).map(deckImportItemHtml).join("");
+    const problems = report.problems || [];
+    ui.deckImportProblemsTitle.hidden = problems.length === 0;
+    ui.deckImportProblems.innerHTML = problems.map((problem) =>
+      `<li><span>${escapeHtml(problem.line)}</span><small>${escapeHtml(problem.reason)}</small></li>`).join("");
+    ui.deckImportReport.hidden = false;
+  } catch (error) {
+    state.deckImportToken = null;
+    setStatus(error.message, true);
+  }
+}
+
+async function commitDeckImport(mode) {
+  if (!state.deckImportToken) return setStatus("Preview the decklist first.", true);
+  try {
+    const data = await getJson("/api/decks/import/commit", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: state.deckImportToken, name: ui.deckImportName.value, mode }),
+    });
+    const report = data.imported_deck || {};
+    applyLibrary(data);
+    closeDeckImportDialog();
+    openDeck(report.deck_id);
+    const details = [`${report.owned || 0} owned`, `${report.proxies || 0} proxies`];
+    if (report.added_to_collection) details.push(`${report.added_to_collection} added to collection`);
+    if (report.skipped) details.push(`${report.skipped} skipped`);
+    setStatus(`Imported ${report.name || "deck"} — ${details.join(", ")}.`);
+  } catch (error) {
+    setStatus(error.message, true);
+  }
 }
 
 function hideCardPreview() {
@@ -1779,6 +1849,10 @@ document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") { event.preventDefault(); ui.proxyDialog.hidden = true; }
     return;
   }
+  if (!ui.deckImportDialog.hidden) {
+    if (event.key === "Escape") { event.preventDefault(); closeDeckImportDialog(); }
+    return;
+  }
   if (!ui.profileImportDialog.hidden) {
     if (event.key === "Escape") { event.preventDefault(); closeProfileImportDialog(); }
     return;
@@ -1877,6 +1951,20 @@ ui.addToDeckBtn.addEventListener("click", () => {
 ui.deckMenuBtn.addEventListener("click", showDeckMenuView);
 ui.newDeckBtn.addEventListener("click", newDeck);
 ui.deckMenuNewBtn.addEventListener("click", newDeck);
+ui.deckImportBtn.addEventListener("click", openDeckImportDialog);
+ui.deckImportCloseBtn.addEventListener("click", closeDeckImportDialog);
+ui.deckImportCancelBtn.addEventListener("click", closeDeckImportDialog);
+ui.deckImportPreviewBtn.addEventListener("click", previewDeckImport);
+ui.deckImportText.addEventListener("input", () => {
+  state.deckImportToken = null;
+  ui.deckImportReport.hidden = true;
+});
+ui.deckImportDialog.addEventListener("click", (event) => {
+  if (event.target === ui.deckImportDialog) closeDeckImportDialog();
+});
+ui.deckImportDialog.querySelectorAll("[data-deck-import-mode]").forEach((button) => {
+  button.addEventListener("click", () => commitDeckImport(button.dataset.deckImportMode));
+});
 ui.deleteDeckBtn.addEventListener("click", deleteDeck);
 ui.proxyListBtn.addEventListener("click", openProxyList);
 ui.deckFilter.addEventListener("input", () => {

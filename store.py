@@ -184,6 +184,76 @@ def create_deck(user_id, name=DEFAULT_DECK_NAME):
     return deck_id
 
 
+DECK_IMPORT_MODES = {"collection", "add_missing", "prefer_collection", "proxies"}
+
+
+def import_deck(user_id, name, resolved, mode):
+    """Create a deck from already-resolved import lines in one transaction.
+
+    Normal cards reserve owned copies; proxy lines deliberately do not. A line
+    is kept whole because a deck card has one proxy flag, rather than mixing
+    owned and proxy copies of the same printing in the same line.
+    """
+    if mode not in DECK_IMPORT_MODES:
+        raise StoreError("Choose how the imported deck should use your collection.")
+    if not resolved:
+        raise StoreError("There are no resolved cards to put in a deck.")
+
+    deck_id = uuid.uuid4().hex
+    deck_name = _clean_name(name or DEFAULT_DECK_NAME)
+    report = {"deck_id": deck_id, "name": deck_name, "mode": mode,
+              "owned": 0, "proxies": 0, "added_to_collection": 0,
+              "skipped": 0}
+    with db.transaction() as conn:
+        now = _now()
+        conn.execute(
+            """INSERT INTO decks (id, user_id, name, commander_id, created, updated)
+               VALUES (?, ?, ?, NULL, ?, ?)""",
+            (deck_id, user_id, deck_name, now, now))
+        allocations = _allocations(conn, user_id)
+
+        for item in resolved:
+            card = item.get("card") or {}
+            quantity = max(1, int((item.get("entry") or {}).get("quantity", 1)))
+            card_id = remember_card(card, conn)
+            owned_row = conn.execute(
+                "SELECT quantity FROM collection WHERE user_id = ? AND card_id = ?",
+                (user_id, card_id)).fetchone()
+            owned = int(owned_row["quantity"]) if owned_row else 0
+            allocated = sum(line["quantity"] for line in allocations.get(card_id, []))
+            free = max(0, owned - allocated)
+
+            proxy = mode == "proxies" or (mode == "prefer_collection" and free < quantity)
+            if mode == "collection" and free < quantity:
+                report["skipped"] += quantity
+                continue
+            if mode == "add_missing":
+                missing = max(0, quantity - free)
+                if missing:
+                    conn.execute(
+                        """INSERT INTO collection (user_id, card_id, quantity, added)
+                           VALUES (?, ?, ?, ?)
+                           ON CONFLICT (user_id, card_id)
+                           DO UPDATE SET quantity = quantity + excluded.quantity""",
+                        (user_id, card_id, missing, now))
+                    report["added_to_collection"] += missing
+                    owned += missing
+                    free += missing
+
+            conn.execute(
+                """INSERT INTO deck_cards (deck_id, card_id, quantity, zone, proxy)
+                   VALUES (?, ?, ?, 'main', ?)""",
+                (deck_id, card_id, quantity, 1 if proxy else 0))
+            if proxy:
+                report["proxies"] += quantity
+            else:
+                report["owned"] += quantity
+                allocations.setdefault(card_id, []).append({
+                    "deck_id": deck_id, "deck_name": deck_name, "quantity": quantity,
+                })
+    return report
+
+
 def _owned_deck(conn, user_id, deck_id):
     row = conn.execute("SELECT * FROM decks WHERE id = ? AND user_id = ?",
                        (deck_id, user_id)).fetchone()
