@@ -126,6 +126,17 @@ class MutationPatchTests(unittest.TestCase):
         self.assertEqual(history["current"], 7.0)
         self.assertEqual(history["history"][0]["value"], 7.0)
 
+    def test_deck_value_counts_main_deck_cards_and_price_refresh_includes_proxies(self):
+        store.add_card(self.user_id, card("bolt", "Lightning Bolt", "2.50"))
+        deck_id = store.create_deck(self.user_id, "Priced deck")
+        store.deck_add(self.user_id, deck_id, "bolt")
+        store.deck_add(self.user_id, deck_id, card=card("proxy", "Proxy Card", "3.25"))
+
+        deck = store.deck_state(self.user_id, deck_id)
+        self.assertEqual(deck["value"], 5.75)
+        self.assertEqual(deck["maybeboard_value"], 0)
+        self.assertEqual(store.collection_card_ids(self.user_id), ["bolt", "proxy"])
+
     def test_proxy_and_maybeboard_do_not_consume_owned_copies(self):
         deck_id = self.post("/api/decks/create", {"name": "Test deck"})["deck_id"]
 

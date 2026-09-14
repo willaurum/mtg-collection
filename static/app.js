@@ -60,7 +60,10 @@ const ui = {
   deckImportSummary: el("deckImportSummary"), deckImportItems: el("deckImportItems"),
   deckImportProblemsTitle: el("deckImportProblemsTitle"), deckImportProblems: el("deckImportProblems"),
   deckPanel: el("deckPanel"), deckName: el("deckName"), deckSummary: el("deckSummary"),
-  deckCategory: el("deckCategory"), deckExportBtn: el("deckExportBtn"),
+  deckCategory: el("deckCategory"), deckPrice: el("deckPrice"), deckExportBtn: el("deckExportBtn"),
+  deckExportDialog: el("deckExportDialog"), deckExportText: el("deckExportText"),
+  deckExportCloseBtn: el("deckExportCloseBtn"), deckExportCancelBtn: el("deckExportCancelBtn"),
+  deckCopyBtn: el("deckCopyBtn"),
   deckGrid: el("deckGrid"), deckEmpty: el("deckEmpty"), deckFilter: el("deckFilter"),
   deckStats: el("deckStats"),
   availList: el("availList"), availEmpty: el("availEmpty"),
@@ -117,7 +120,8 @@ const state = {
   collectionView: readPreference("mtg.collection-view", "grid"),
   collectionSort: readPreference("mtg.collection-sort", "name"),
   unusedOnly: readPreference("mtg.collection-unused", "0") === "1",
-  collectionFilters: { availability: "all", color: "all", type: "all", rarity: "all" },
+  collectionFilters: { availability: "all", colors: new Set(), type: "all", rarity: "all" },
+  priceRefreshChecked: false,
   commandItems: [],
   commandIndex: 0,
   pendingProfile: null,
@@ -656,8 +660,10 @@ function renderCollection() {
       const type = filters.type === "all" ||
         (card.type_line || "").toLocaleLowerCase().includes(filters.type);
       const rarity = filters.rarity === "all" || card.rarity === filters.rarity;
-      const colour = filters.color === "all" ||
-        (filters.color === "colorless" ? colours.length === 0 : colours.includes(filters.color));
+      const selectedColors = filters.colors;
+      const colour = selectedColors.size === 0 ||
+        (selectedColors.has("colorless") && colours.length === 0) ||
+        [...selectedColors].some((color) => color !== "colorless" && colours.includes(color));
       return terms.every((term) => text.includes(term)) && availability && type && rarity && colour &&
         (!state.unusedOnly || (entry.allocated || 0) === 0);
     })
@@ -673,7 +679,9 @@ function renderCollection() {
   ui.collectionFiltersBtn.setAttribute("aria-expanded", String(!ui.collectionFiltersPanel.hidden));
   ui.collectionFiltersPanel.querySelectorAll("[data-collection-filter]").forEach((button) => {
     const { collectionFilter, value } = button.dataset;
-    button.classList.toggle("active", filters[collectionFilter] === value);
+    button.classList.toggle("active", collectionFilter === "color"
+      ? (value === "all" ? filters.colors.size === 0 : filters.colors.has(value))
+      : filters[collectionFilter] === value);
   });
   ui.collEmpty.hidden = entries.length > 0;
   if (!entries.length) {
@@ -726,6 +734,13 @@ function toggleCollectionFilters() {
 }
 
 function setCollectionFilter(kind, value) {
+  if (kind === "color") {
+    if (value === "all") state.collectionFilters.colors.clear();
+    else if (state.collectionFilters.colors.has(value)) state.collectionFilters.colors.delete(value);
+    else state.collectionFilters.colors.add(value);
+    renderCollection();
+    return;
+  }
   if (!(kind in state.collectionFilters)) return;
   state.collectionFilters[kind] = value;
   renderCollection();
@@ -1334,6 +1349,10 @@ function renderDeckSummary(deck) {
   if (deck.maybeboard_count) parts.push(`${deck.maybeboard_count} in maybeboard`);
   ui.deckSummary.textContent = parts.join(" · ");
   ui.deckSummary.classList.toggle("ok", deck.count === 100 && Boolean(commander));
+  ui.deckPrice.textContent = `Deck price ${money(deck.value)}`;
+  ui.deckPrice.title = deck.maybeboard_count
+    ? `Main deck ${money(deck.value)} · Maybeboard ${money(deck.maybeboard_value)}`
+    : "Current Scryfall USD market value of the main deck";
 
   const broken = state.problems.size;
   ui.deckLegality.hidden = deck.cards.length === 0;
@@ -1601,16 +1620,37 @@ function exportDeck() {
   sections.push("", "Deck", ...sortLines(cards).map(asLine));
   const maybeboard = deck.cards.filter((line) => line.zone === "maybeboard");
   if (maybeboard.length) sections.push("", "Maybeboard", ...sortLines(maybeboard).map(asLine));
-  const filename = `${deck.name.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "deck"}.txt`;
-  const url = URL.createObjectURL(new Blob([sections.join("\n") + "\n"], { type: "text/plain" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-  setStatus(`${deck.name} exported.`);
+  ui.deckExportText.value = sections.join("\n") + "\n";
+  ui.deckExportDialog.hidden = false;
+  ui.deckExportText.focus();
+  ui.deckExportText.select();
+}
+
+async function copyDeckExport() {
+  const text = ui.deckExportText.value;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    ui.deckExportText.focus();
+    ui.deckExportText.select();
+    if (!document.execCommand("copy")) {
+      setStatus("Select the decklist and copy it manually.", true);
+      return;
+    }
+  }
+  setStatus("Decklist copied to the clipboard.");
+}
+
+async function refreshDeckPrices() {
+  if (state.priceRefreshChecked) return;
+  try {
+    const library = await getJson("/api/prices/refresh");
+    state.priceRefreshChecked = true;
+    applyLibrary(library);
+    if (library.prices_stale) setStatus("Could not refresh prices; showing the last cached values.", true);
+  } catch {
+    // Price refresh is additive: opening a deck must still be immediate offline.
+  }
 }
 
 function showDeckMenuView() {
@@ -1627,6 +1667,7 @@ function openDeck(deckId) {
   showView(ui.deckPanel, "deck");   // the deck's own row in the rail lights up
   renderDeckList();
   renderDeckPanel();
+  refreshDeckPrices();
 }
 
 /* -------------------------------------------------------------- import */
@@ -2084,6 +2125,12 @@ ui.deckImportDialog.querySelectorAll("[data-deck-import-mode]").forEach((button)
 });
 ui.deleteDeckBtn.addEventListener("click", deleteDeck);
 ui.deckExportBtn.addEventListener("click", exportDeck);
+ui.deckCopyBtn.addEventListener("click", copyDeckExport);
+ui.deckExportCloseBtn.addEventListener("click", () => { ui.deckExportDialog.hidden = true; });
+ui.deckExportCancelBtn.addEventListener("click", () => { ui.deckExportDialog.hidden = true; });
+ui.deckExportDialog.addEventListener("click", (event) => {
+  if (event.target === ui.deckExportDialog) ui.deckExportDialog.hidden = true;
+});
 ui.proxyListBtn.addEventListener("click", openProxyList);
 ui.deckFilter.addEventListener("input", () => {
   state.deckSearchCard = null;

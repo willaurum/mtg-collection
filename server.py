@@ -162,6 +162,24 @@ def _library(**extra):
     return jsonify(payload)
 
 
+def _refresh_current_prices(user_id):
+    """Refresh every printing a user owns or plays, at most once per day."""
+    refreshed = False
+    stale = False
+    if store.price_refresh_due(user_id):
+        try:
+            cards, _missing = scryfall.cards_by_identifiers(
+                [{"id": card_id} for card_id in store.collection_card_ids(user_id)]
+            )
+            store.refresh_collection_prices(user_id, cards)
+            refreshed = True
+        except scryfall.ScryfallError:
+            # A history based on the last cached prices is still more helpful
+            # than an error modal when the Pi temporarily has no internet.
+            stale = True
+    return {"prices_refreshed": refreshed, "prices_stale": stale}
+
+
 def _patch_response(entry_ids=(), removed_entry_ids=(), deck_ids=(),
                     removed_deck_ids=(), entry_id=None, **extra):
     """Return just the records changed by a successful mutation."""
@@ -198,22 +216,16 @@ def api_library():
 @auth.api_login_required
 def api_price_history():
     user_id = auth.user_id()
-    refreshed = False
-    stale = False
-    if store.price_refresh_due(user_id):
-        try:
-            cards, _missing = scryfall.cards_by_identifiers(
-                [{"id": card_id} for card_id in store.collection_card_ids(user_id)]
-            )
-            store.refresh_collection_prices(user_id, cards)
-            refreshed = True
-        except scryfall.ScryfallError:
-            # A history based on the last cached prices is still more helpful
-            # than an error modal when the Pi temporarily has no internet.
-            stale = True
+    refresh = _refresh_current_prices(user_id)
     payload = store.price_history(user_id)
-    payload.update({"refreshed": refreshed, "stale": stale})
+    payload.update({"refreshed": refresh["prices_refreshed"], "stale": refresh["prices_stale"]})
     return jsonify(payload)
+
+
+@app.get("/api/prices/refresh")
+@auth.api_login_required
+def api_price_refresh():
+    return _library(**_refresh_current_prices(auth.user_id()))
 
 
 @app.get("/api/profile/export")

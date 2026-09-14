@@ -302,6 +302,7 @@
           <div class="deck-name-row">
             <input id="deckName" class="deck-name" maxlength="60" spellcheck="false"
                    aria-label="Deck name">
+            <span class="deck-price" id="deckPrice" title="Current Scryfall USD market value of the main deck">Deck price $0.00</span>
             <span class="legality" id="deckLegality" hidden></span>
           </div>
           <input id="deckCategory" class="deck-category" maxlength="60" spellcheck="false"
@@ -310,7 +311,7 @@
           <p class="deck-problems" id="deckProblems" hidden></p>
         </div>
         <div class="head-actions">
-          <button class="btn quiet" id="deckExportBtn">Export deck</button>
+          <button class="btn quiet" id="deckExportBtn">Copy decklist</button>
           <button class="btn quiet" id="proxyListBtn" hidden>Proxies</button>
           <button class="btn quiet danger" id="deleteDeckBtn">Delete deck</button>
         </div>
@@ -395,6 +396,17 @@
     <p class="price-current" id="priceHistoryCurrent">$0.00</p>
     <p class="sub" id="priceHistoryChange">Your daily history will appear here.</p>
     <ul class="price-history-list" id="priceHistoryList"></ul>
+  </section>
+</div>
+
+<div class="deck-export-overlay" id="deckExportDialog" hidden>
+  <section class="deck-export-dialog" role="dialog" aria-modal="true" aria-labelledby="deckExportTitle">
+    <button class="detail-close" id="deckExportCloseBtn" aria-label="Close">×</button>
+    <h2 id="deckExportTitle">Copy decklist</h2>
+    <p class="sub">This is ready to paste into the app’s deck importer or another decklist tool.</p>
+    <textarea id="deckExportText" readonly spellcheck="false" aria-label="Decklist to copy"></textarea>
+    <div class="import-actions"><button class="btn primary" id="deckCopyBtn">Copy to clipboard</button>
+      <button class="btn quiet" id="deckExportCancelBtn">Close</button></div>
   </section>
 </div>
 

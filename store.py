@@ -515,7 +515,11 @@ def price_refresh_due(user_id, conn=None):
 def collection_card_ids(user_id, conn=None):
     conn = conn or db.connect()
     return [row["card_id"] for row in conn.execute(
-        "SELECT card_id FROM collection WHERE user_id = ? ORDER BY card_id", (user_id,)
+        """SELECT card_id FROM collection WHERE user_id = ?
+           UNION
+           SELECT dc.card_id FROM deck_cards dc JOIN decks d ON d.id = dc.deck_id
+            WHERE d.user_id = ?
+           ORDER BY card_id""", (user_id, user_id)
     )]
 
 
@@ -593,6 +597,11 @@ def deck_state(user_id, deck_id, conn=None):
     lines = [{"card_id": card["card_id"], "quantity": int(card["quantity"]),
               "zone": card["zone"], "proxy": bool(card["proxy"]),
               "missing": bool(card["missing"]), "card": card_json(card)} for card in cards]
+    def line_value(line):
+        try:
+            return float((line["card"].get("prices") or {}).get("usd") or 0) * line["quantity"]
+        except (TypeError, ValueError):
+            return 0
     return {
         "id": row["id"], "name": row["name"], "created": row["created"],
         "updated": row["updated"], "category": row["category"],
@@ -600,6 +609,8 @@ def deck_state(user_id, deck_id, conn=None):
         "cards": lines,
         "count": sum(line["quantity"] for line in lines if line["zone"] == "main"),
         "maybeboard_count": sum(line["quantity"] for line in lines if line["zone"] == "maybeboard"),
+        "value": round(sum(line_value(line) for line in lines if line["zone"] == "main"), 2),
+        "maybeboard_value": round(sum(line_value(line) for line in lines if line["zone"] == "maybeboard"), 2),
     }
 
 
