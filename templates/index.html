@@ -84,18 +84,13 @@
 
     <div class="rail-group">
       <div class="rail-head">
-        <svg class="ico"><use href="#i-decks"/></svg><span>Decks</span>
+        <button class="rail-decks-btn" id="deckMenuBtn" type="button">
+          <svg class="ico"><use href="#i-decks"/></svg><span>Decks</span>
+        </button>
         <button class="icon-btn" id="newDeckBtn" title="New deck">
           <svg class="ico"><use href="#i-plus"/></svg>
         </button>
       </div>
-      <div class="rail-deck-picker">
-        <button class="rail-deck-btn" id="deckListBtn" type="button" aria-haspopup="menu" aria-expanded="false">
-          <span id="deckListLabel">Choose a deck</span><span class="rail-deck-caret">⌄</span>
-        </button>
-        <div class="rail-deck-menu" id="deckList" role="menu" hidden></div>
-      </div>
-      <p class="rail-empty" id="deckListEmpty">No decks yet</p>
     </div>
 
     <div class="rail-group grow">
@@ -260,6 +255,17 @@
     </section>
 
     <!-- ------------------------------------------------------ decks -->
+    <section class="view" id="deckMenuPanel" hidden>
+      <header class="view-head">
+        <div><h1>Decks</h1><p class="sub">Choose a deck to build, inspect, and manage.</p></div>
+        <button class="btn primary" id="deckMenuNewBtn">New deck</button>
+      </header>
+      <div class="view-body">
+        <div class="deck-directory" id="deckList"></div>
+        <p class="empty" id="deckListEmpty" hidden>No decks yet — create your first one.</p>
+      </div>
+    </section>
+
     <section class="view" id="deckPanel" hidden>
       <header class="view-head">
         <div class="deck-title">
@@ -319,11 +325,6 @@
 
 <aside class="card-preview" id="cardPreview" aria-hidden="true" hidden>
   <img id="previewArt" alt="">
-  <div class="preview-copy">
-    <h2 id="previewName"></h2>
-    <p id="previewType"></p>
-    <p id="previewText"></p>
-  </div>
 </aside>
 
 <div class="command-overlay" id="commandPalette" hidden>

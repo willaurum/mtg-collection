@@ -47,8 +47,8 @@ const ui = {
   profileImportDialog: el("profileImportDialog"), profileImportSummary: el("profileImportSummary"),
   profileMergeBtn: el("profileMergeBtn"), profileReplaceBtn: el("profileReplaceBtn"),
   profileImportCancelBtn: el("profileImportCancelBtn"),
-  deckList: el("deckList"), deckListBtn: el("deckListBtn"), deckListLabel: el("deckListLabel"),
-  deckListEmpty: el("deckListEmpty"), newDeckBtn: el("newDeckBtn"),
+  deckList: el("deckList"), deckListEmpty: el("deckListEmpty"), deckMenuBtn: el("deckMenuBtn"),
+  deckMenuPanel: el("deckMenuPanel"), deckMenuNewBtn: el("deckMenuNewBtn"), newDeckBtn: el("newDeckBtn"),
   deckPanel: el("deckPanel"), deckName: el("deckName"), deckSummary: el("deckSummary"),
   deckGrid: el("deckGrid"), deckEmpty: el("deckEmpty"), deckFilter: el("deckFilter"),
   deckStats: el("deckStats"),
@@ -67,7 +67,6 @@ const ui = {
   importHint: el("importHint"),
   whoami: el("whoami"), whoName: el("whoName"), logoutBtn: el("logoutBtn"),
   cardPreview: el("cardPreview"), previewArt: el("previewArt"),
-  previewName: el("previewName"), previewType: el("previewType"), previewText: el("previewText"),
   commandPalette: el("commandPalette"), commandInput: el("commandInput"),
   commandList: el("commandList"),
   cardDetailDialog: el("cardDetailDialog"), detailCloseBtn: el("detailCloseBtn"),
@@ -501,6 +500,7 @@ function applyPatch(data) {
   renderDeckList();
   renderOwned();
   if (!ui.collectionPanel.hidden) renderCollection();
+  if (!ui.deckMenuPanel.hidden) renderDeckList();
   if (!ui.deckPanel.hidden) renderDeckPanel();
 }
 
@@ -783,13 +783,9 @@ function showCardPreview(cardOrId, anchor) {
   const entry = typeof cardOrId === "string" ? state.entryById.get(cardOrId) : null;
   const card = entry ? (entry.card || {}) : (cardOrId || {});
   if (!Object.keys(card).length) return;
-  const text = frontFace(card).oracle_text || card.oracle_text || "No rules text.";
   const art = imageUrl(card, 0);
   ui.previewArt.src = art ? `/img?u=${encodeURIComponent(art)}` : "";
   ui.previewArt.alt = (entry && entry.name) || card.name || "";
-  ui.previewName.textContent = (entry && entry.name) || card.name || "Unknown card";
-  ui.previewType.textContent = frontFace(card).type_line || card.type_line || "";
-  ui.previewText.textContent = text.length > 220 ? text.slice(0, 217) + "…" : text;
   ui.cardPreview.hidden = false;
 
   const rect = anchor.getBoundingClientRect();
@@ -863,6 +859,7 @@ function detailBase(card, kicker, meta) {
 function openCollectionDetail(cardId) {
   const entry = state.entryById.get(cardId);
   if (!entry) return;
+  hideCardPreview();
   const locations = (entry.locations || []).map((line) => `${line.deck_name} ×${line.quantity}`).join(" · ");
   detailBase(entry.card || {}, "Collection card",
     `${entry.quantity} owned · ${entry.available} free${locations ? ` · ${locations}` : ""}`);
@@ -881,6 +878,7 @@ function openDeckDetail(deckId, cardId) {
   const deck = deckById(deckId);
   const line = deck && deck.cards.find((item) => item.card_id === cardId);
   if (!line) return;
+  hideCardPreview();
   const card = lineCard(line);
   detailBase(card, line.proxy ? "Proxy" : "Deck card",
     `${line.quantity} in ${line.zone === "maybeboard" ? "maybeboard" : "main deck"}`);
@@ -969,20 +967,13 @@ const deckName = (id) => (deckById(id) || {}).name || "the deck";
 function renderDeckList() {
   const decks = state.library.decks || [];
   ui.deckListEmpty.hidden = decks.length > 0;
-  const current = deckById(state.deckId);
-  ui.deckListLabel.textContent = current ? current.name : "Choose a deck";
-  ui.deckListBtn.disabled = decks.length === 0;
   ui.deckList.innerHTML = decks.map((deck) => `
-    <button data-id="${escapeHtml(deck.id)}" role="menuitem" class="${deck.id === state.deckId ? "active" : ""}">
-      <span class="dname">${escapeHtml(deck.name)}</span>
-      <span class="dcount">${deck.count}</span>
+    <button class="deck-directory-card" data-id="${escapeHtml(deck.id)}">
+      <span class="deck-directory-title">${escapeHtml(deck.name)}</span>
+      <span class="deck-directory-meta">${deck.count} main cards · ${deck.maybeboard_count || 0} maybeboard · ${deck.cards.length} unique</span>
     </button>`).join("");
   [...ui.deckList.children].forEach((item) => {
-    item.addEventListener("click", () => {
-      ui.deckList.hidden = true;
-      ui.deckListBtn.setAttribute("aria-expanded", "false");
-      openDeck(item.dataset.id);
-    });
+    item.addEventListener("click", () => openDeck(item.dataset.id));
   });
 }
 
@@ -1404,12 +1395,13 @@ const NAV = {
   card: () => ui.navCard,
   collection: () => ui.viewCollectionBtn,
   import: () => ui.importBtn,
+  decks: () => ui.deckMenuBtn,
 };
 
 function showView(panel, navKey) {
   disarmDelete();
   hideCardPreview();
-  [ui.cardPanel, ui.collectionPanel, ui.deckPanel, ui.importPanel]
+  [ui.cardPanel, ui.collectionPanel, ui.deckMenuPanel, ui.deckPanel, ui.importPanel]
     .forEach((node) => { node.hidden = node !== panel; });
   Object.entries(NAV).forEach(([key, node]) =>
     node().classList.toggle("active", key === navKey));
@@ -1425,6 +1417,13 @@ function showCollectionView() {
 
 function showCardView() {
   showView(ui.cardPanel, "card");
+}
+
+function showDeckMenuView() {
+  state.deckId = null;
+  state.cardSeq++;
+  showView(ui.deckMenuPanel, "decks");
+  renderDeckList();
 }
 
 function openDeck(deckId) {
@@ -1859,12 +1858,9 @@ ui.importText.addEventListener("input", () => {
 ui.addToDeckBtn.addEventListener("click", () => {
   ui.deckPicker.hidden = !ui.deckPicker.hidden;
 });
-ui.deckListBtn.addEventListener("click", () => {
-  const opening = ui.deckList.hidden;
-  ui.deckList.hidden = !opening;
-  ui.deckListBtn.setAttribute("aria-expanded", String(opening));
-});
+ui.deckMenuBtn.addEventListener("click", showDeckMenuView);
 ui.newDeckBtn.addEventListener("click", newDeck);
+ui.deckMenuNewBtn.addEventListener("click", newDeck);
 ui.deleteDeckBtn.addEventListener("click", deleteDeck);
 ui.proxyListBtn.addEventListener("click", openProxyList);
 ui.deckFilter.addEventListener("input", () => {
