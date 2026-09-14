@@ -816,8 +816,20 @@ function lineName(line) {
 function closeCardDetail() {
   ui.cardDetailDialog.hidden = true;
   ui.detailArt.removeAttribute("src");
-  ui.detailFacts.innerHTML = "";
+  if (ui.detailFacts) ui.detailFacts.innerHTML = "";
   ui.detailActions.innerHTML = "";
+}
+
+function detailFactsElement() {
+  if (ui.detailFacts) return ui.detailFacts;
+  // A cached page shell from before the richer detail view did not include
+  // this optional region. Create it on demand so it cannot block the dialog.
+  const facts = document.createElement("div");
+  facts.className = "detail-facts";
+  facts.id = "detailFacts";
+  ui.detailActions.parentNode.insertBefore(facts, ui.detailActions);
+  ui.detailFacts = facts;
+  return facts;
 }
 
 function detailFactsHtml(card, shown) {
@@ -850,7 +862,11 @@ function detailBase(card, kicker, meta) {
   ui.detailRules.innerHTML = (shown.oracle_text || card.oracle_text || "No rules text.")
     .split("\n").filter(Boolean).map((line) => `<p>${withInlinePips(line)}</p>`).join("");
   ui.detailMeta.textContent = meta || "";
-  ui.detailFacts.innerHTML = detailFactsHtml(card, shown);
+  try {
+    detailFactsElement().innerHTML = detailFactsHtml(card, shown);
+  } catch {
+    detailFactsElement().textContent = "Additional card details are unavailable for this printing.";
+  }
   ui.detailArt.src = art ? `/img?u=${encodeURIComponent(art)}` : "";
   ui.detailArt.alt = card.name || "";
   ui.cardDetailDialog.hidden = false;
