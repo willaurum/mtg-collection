@@ -332,13 +332,12 @@ function priceChipsHtml(card) {
   const prices = card.prices || {};
   const money = [
     ["usd", "USD", "$", "legal"], ["usd_foil", "FOIL", "$", "restricted"],
-    ["eur", "EUR", "€", "not_legal"], ["tix", "MTGO", "", "not_legal"],
   ].filter(([key]) => prices[key])
    .map(([key, label, symbol, tone]) =>
      `<span class="chip ${tone}">${label}<span class="v">${symbol}${escapeHtml(prices[key])}</span></span>`);
   return money.length
     ? money.join("")
-    : '<span class="chip not_legal">No price data</span>';
+    : '<span class="chip not_legal">No USD price data</span>';
 }
 
 function legalityChipsHtml(card) {
