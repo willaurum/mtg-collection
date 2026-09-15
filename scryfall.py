@@ -8,6 +8,8 @@ https://scryfall.com/docs/api
 from __future__ import annotations
 
 import hashlib
+import functools
+from decimal import Decimal, InvalidOperation
 import json
 import os
 import sys
@@ -184,6 +186,40 @@ def printings(card):
         return printings_by_uri(uri)
     except ScryfallError:
         return [card]
+
+
+def cheapest_printing_usd(card):
+    """Lowest paper price across printings/finishes, cached for one UTC day."""
+    identity = ("oracleid:" + card["oracle_id"] if card.get("oracle_id")
+                else "!" + json.dumps(card["name"]))
+    return _cheapest_printing_usd(identity, int(time.time() // 86400))
+
+
+@functools.lru_cache(maxsize=2048)
+def _cheapest_printing_usd(identity, day):
+    query = urllib.parse.urlencode({"q": identity + " game:paper",
+                                    "unique": "prints"})
+    uri = API + "/cards/search?" + query
+    cheapest = None
+    while uri:
+        if not uri.startswith(API_PREFIX):
+            raise ScryfallError("Refusing a printing URL outside the Scryfall API")
+        try:
+            page = _get_json(uri)
+        except ScryfallError as exc:
+            if exc.status == 404 and cheapest is None:
+                return None
+            raise
+        for printing in page.get("data", []):
+            for field in ("usd", "usd_foil", "usd_etched"):
+                try:
+                    price = Decimal((printing.get("prices") or {}).get(field) or "NaN")
+                except (InvalidOperation, TypeError, ValueError):
+                    continue
+                if price.is_finite() and price >= 0:
+                    cheapest = price if cheapest is None else min(cheapest, price)
+        uri = page.get("next_page") if page.get("has_more") else None
+    return cheapest
 
 
 def image_bytes(url):

@@ -61,6 +61,7 @@ const ui = {
   deckImportProblemsTitle: el("deckImportProblemsTitle"), deckImportProblems: el("deckImportProblems"),
   deckPanel: el("deckPanel"), deckName: el("deckName"), deckSummary: el("deckSummary"),
   deckCategory: el("deckCategory"), deckPrice: el("deckPrice"), deckExportBtn: el("deckExportBtn"),
+  deckUnownedPrice: el("deckUnownedPrice"),
   deckExportDialog: el("deckExportDialog"), deckExportText: el("deckExportText"),
   deckExportCloseBtn: el("deckExportCloseBtn"), deckExportCancelBtn: el("deckExportCancelBtn"),
   deckCopyBtn: el("deckCopyBtn"),
@@ -121,6 +122,7 @@ const state = {
   unusedOnly: readPreference("mtg.collection-unused", "0") === "1",
   collectionFilters: { availability: "all", colors: new Set(), type: "all", rarity: "all" },
   priceRefreshChecked: false,
+  unownedPriceKey: null,
   commandItems: [],
   commandIndex: 0,
   pendingProfile: null,
@@ -1381,6 +1383,31 @@ function renderDeckPanel() {
   wireDeckCards();
 }
 
+async function renderUnownedPrice(deck) {
+  // Invalidate on deck contents, ownership, or day changes. An older request
+  // must never overwrite the estimate for a newer selection.
+  const key = JSON.stringify([deck.id, new Date().toISOString().slice(0, 10),
+    deck.cards.map((line) => [line.card_id, line.quantity, line.zone]),
+    state.library.entries.map((entry) => [entry.id, entry.quantity])]);
+  if (state.unownedPriceKey === key) return;
+  state.unownedPriceKey = key;
+  ui.deckUnownedPrice.textContent = "Unowned (cheapest): loading…";
+  ui.deckUnownedPrice.title = "Main deck only. Counts owned copies across all printings, including copies in other decks. Cheapest paper USD prices include foil finishes; excludes shipping and tax.";
+  try {
+    const data = await getJson(`/api/decks/${encodeURIComponent(deck.id)}/unowned-price`);
+    if (state.unownedPriceKey !== key) return;
+    const partial = data.unpriced_count > 0;
+    ui.deckUnownedPrice.textContent = partial && data.unpriced_count === data.missing_count
+      ? "Unowned (cheapest): price unavailable"
+      : `Unowned (cheapest): ${money(data.value)}${partial ? " + unknown" : ""}`;
+    ui.deckUnownedPrice.title += ` ${data.missing_count} missing copies; ${data.unpriced_count} without prices.`;
+  } catch {
+    if (state.unownedPriceKey !== key) return;
+    ui.deckUnownedPrice.textContent = "Unowned (cheapest): unavailable";
+    state.unownedPriceKey = null; // Retry on the next render.
+  }
+}
+
 function renderDeckSummary(deck) {
   const unique = deck.cards.length;
   const commanderLine = deck.cards.find((line) => line.card_id === deck.commander_id);
@@ -1391,6 +1418,7 @@ function renderDeckSummary(deck) {
   ui.deckSummary.textContent = parts.join(" · ");
   ui.deckSummary.classList.toggle("ok", deck.count === 100 && Boolean(commander));
   ui.deckPrice.textContent = `Deck price ${money(deck.value)}`;
+  renderUnownedPrice(deck);
   ui.deckPrice.title = deck.maybeboard_count
     ? `Main deck ${money(deck.value)} · Maybeboard ${money(deck.maybeboard_value)}`
     : "Current Scryfall USD market value of the main deck";

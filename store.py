@@ -623,6 +623,33 @@ def deck_state(user_id, deck_id, conn=None):
     }
 
 
+def unowned_deck_cards(user_id, deck_id):
+    """Main-deck shortfalls, counting owned copies across all printings.
+
+    Ownership includes copies in other decks: this is a purchase estimate,
+    not an allocation of the user's collection.
+    """
+    deck = deck_state(user_id, deck_id)
+    if deck is None:
+        raise StoreError("Deck not found.")
+    needed = {}
+    for line in deck["cards"]:
+        if line["zone"] != "main":
+            continue
+        card = line["card"]
+        key = card.get("name", "").casefold()
+        item = needed.setdefault(key, {"card": card, "quantity": 0})
+        item["quantity"] += line["quantity"]
+    rows = db.connect().execute(
+        """SELECT k.name, c.quantity FROM collection c
+           JOIN cards k ON k.id = c.card_id WHERE c.user_id = ?""", (user_id,))
+    for row in rows:
+        key = row["name"].casefold()
+        if key in needed:
+            needed[key]["quantity"] -= int(row["quantity"])
+    return [item for item in needed.values() if item["quantity"] > 0]
+
+
 def patch(user_id, entry_ids=(), deck_ids=()):
     """The small, self-consistent state change returned after a mutation."""
     conn = db.connect()

@@ -15,6 +15,8 @@ import sys
 import secrets
 import uuid
 import webbrowser
+from decimal import Decimal
+from concurrent.futures import ThreadPoolExecutor
 
 from flask import (Flask, Response, g, jsonify, redirect, render_template,
                    request, session, url_for)
@@ -272,6 +274,33 @@ def api_collection_remove():
         auth.user_id(), card_id, bool(payload.get("all"))),
         lambda entry: ({"entry_ids": [entry["id"]], "entry_id": entry["id"]}
                        if entry else {"removed_entry_ids": [card_id], "entry_id": card_id}))
+
+
+@app.get("/api/decks/<deck_id>/unowned-price")
+@auth.api_login_required
+def api_deck_unowned_price(deck_id):
+    try:
+        missing = store.unowned_deck_cards(auth.user_id(), deck_id)
+    except store.StoreError as exc:
+        return jsonify(error=str(exc)), 404
+    total = Decimal("0")
+    unpriced = 0
+    def lookup(item):
+        try:
+            return scryfall.cheapest_printing_usd(item["card"])
+        except (scryfall.ScryfallError, TimeoutError):
+            return None
+    # Keep a large deck's initial lookup responsive. Scryfall's shared
+    # throttle still spaces every request, including pagination requests.
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        for item, price in zip(missing, executor.map(lookup, missing)):
+            if price is None:
+                unpriced += item["quantity"]
+            else:
+                total += price * item["quantity"]
+    return jsonify(value=float(total.quantize(Decimal("0.01"))),
+                   missing_count=sum(item["quantity"] for item in missing),
+                   unpriced_count=unpriced)
 
 
 @app.post("/api/decks/create")

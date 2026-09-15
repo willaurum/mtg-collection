@@ -825,7 +825,8 @@ kbd {
 .stat-tags .stat-muted { font-style: italic; color: var(--faint); }
 .stat-colour.w { color: #f3ead0; }.stat-colour.u { color: #9dcbe8; }.stat-colour.b { color: #b6afc2; }.stat-colour.r { color: #e8907c; }.stat-colour.g { color: #86c087; }
 
-.deck-name-row { display: flex; align-items: center; gap: 10px; }
+.deck-name-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.deck-name-row .deck-name { flex: 1 1 240px; width: auto; min-width: 0; }
 
 .legality {
   flex: 0 0 auto;

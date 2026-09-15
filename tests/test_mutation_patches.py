@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import unittest
+from decimal import Decimal
+from unittest.mock import patch
 
 
 TEST_DATA = os.path.dirname(__file__)
@@ -12,6 +14,7 @@ os.environ["MTG_DATA_DIR"] = TEST_DATA
 import auth  # noqa: E402  (the data directory must be set before importing)
 import db  # noqa: E402
 import store  # noqa: E402
+import scryfall  # noqa: E402
 auth.secret_key = lambda: b"test-session-key" * 4  # noqa: E731
 from server import app  # noqa: E402
 
@@ -209,6 +212,42 @@ class MutationPatchTests(unittest.TestCase):
         self.assertEqual(converted_line["quantity"], 2)
         self.assertEqual(converted["summary"]["allocated"], 0)
         self.assertEqual(converted["entries"][0]["available"], 1)
+
+    def test_unowned_price_counts_shortfall_across_printings_and_excludes_maybeboard(self):
+        store.add_card(self.user_id, card("owned-bolt", "Lightning Bolt"), quantity=2)
+        deck_id = self.post("/api/decks/create", {"name": "Burn"})["deck_id"]
+        for printing, quantity in (("bolt-a", 2), ("bolt-b", 3)):
+            self.post("/api/decks/add", {"deck_id": deck_id,
+                      "card": card(printing, "Lightning Bolt"), "quantity": quantity})
+        self.post("/api/decks/add", {"deck_id": deck_id,
+                  "card": card("maybe", "Maybeboard Card"), "zone": "maybeboard"})
+        with patch("scryfall.cheapest_printing_usd", return_value=Decimal("0.17")) as lookup:
+            response = self.client.get(f"/api/decks/{deck_id}/unowned-price")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(),
+                         {"value": 0.51, "missing_count": 3, "unpriced_count": 0})
+        lookup.assert_called_once()
+        store.add_card(self.user_id, card("owned-bolt", "Lightning Bolt"), quantity=3)
+        with patch("scryfall.cheapest_printing_usd") as lookup:
+            result = self.client.get(f"/api/decks/{deck_id}/unowned-price").get_json()
+        self.assertEqual(result, {"value": 0.0, "missing_count": 0, "unpriced_count": 0})
+        lookup.assert_not_called()
+
+    def test_unowned_price_flags_missing_prices_and_enforces_deck_ownership(self):
+        deck_id = self.post("/api/decks/create", {"name": "Burn"})["deck_id"]
+        for printing in ("a", "b", "c"):
+            self.post("/api/decks/add", {"deck_id": deck_id,
+                      "card": card(printing, printing), "quantity": 2})
+        with patch("scryfall.cheapest_printing_usd",
+                   side_effect=[Decimal("1.25"), None, scryfall.ScryfallError("Offline")]):
+            result = self.client.get(f"/api/decks/{deck_id}/unowned-price").get_json()
+        self.assertEqual(result, {"value": 2.5, "missing_count": 6, "unpriced_count": 4})
+        other = auth.create_user("other-user", "another long password")
+        with self.client.session_transaction() as session:
+            session[auth.SESSION_KEY] = other
+        with patch("scryfall.cheapest_printing_usd") as lookup:
+            self.assertEqual(self.client.get(f"/api/decks/{deck_id}/unowned-price").status_code, 404)
+        lookup.assert_not_called()
 
     def test_deck_import_can_reserve_owned_cards_or_add_missing_copies(self):
         store.add_card(self.user_id, card("bolt", "Lightning Bolt"), quantity=1)
