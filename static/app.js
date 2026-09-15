@@ -160,6 +160,12 @@ function imageUrl(card, index) {
   return uris.normal || uris.large || uris.png || "";
 }
 
+function artCropUrl(card, index) {
+  const source = isDoubleFaced(card) ? faceOf(card, index) : card;
+  const uris = source.image_uris || card.image_uris || {};
+  return uris.art_crop || "";
+}
+
 function pipHtml(symbol, small) {
   const cls = "pip" + (small ? " sm" : "");
   const parts = symbol.split("/");
@@ -1134,12 +1140,10 @@ function deckCoverHtml(deck) {
     return '<span class="deck-cover empty-cover" aria-hidden="true"><svg class="ico"><use href="#i-decks"/></svg></span>';
   }
   const card = lineCard(coverLine);
-  const art = imageUrl(card, 0);
-  const name = lineName(coverLine);
+  const art = artCropUrl(card, 0);
   return `<span class="deck-cover${commanderLine ? " commander-cover" : ""}" aria-hidden="true">
-    <img src="${art ? `/img?u=${encodeURIComponent(art)}` : ""}" alt="" loading="lazy">
+    ${art ? `<img src="/img?u=${encodeURIComponent(art)}" alt="" loading="lazy">` : '<svg class="ico"><use href="#i-decks"/></svg>'}
     ${commanderLine ? '<i>Commander</i>' : ""}
-    <b>${escapeHtml(name)}</b>
   </span>`;
 }
 

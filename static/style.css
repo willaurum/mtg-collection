@@ -381,19 +381,18 @@ body.busy .progress { opacity: 1; }
 .view-head h1 { font-family: var(--display); font-size: 21px; }
 .deck-directory { display: grid; gap: 24px; max-width: 1100px; }
 .deck-folder h2 { margin: 0 0 9px; color: var(--gold); font: 600 11px var(--sans); letter-spacing: .12em; text-transform: uppercase; }
-.deck-folder-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
-.deck-directory-card { display: grid; grid-template-columns: 68px minmax(0, 1fr); min-height: 118px; align-items: stretch; gap: 14px; padding: 12px; border: 1px solid var(--line); border-radius: var(--r); background: var(--elevate); color: var(--text); cursor: pointer; text-align: left; transition: border-color .14s, transform .14s, background .14s; }
-.deck-directory-card:hover { transform: translateY(-2px); border-color: var(--gold); background: var(--gold-soft); }
-.deck-cover { position: relative; display: grid; min-height: 94px; overflow: hidden; place-items: center; border: 1px solid var(--line-2); border-radius: 5px; background: var(--sunken); color: var(--faint); }
+.deck-folder-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+.deck-directory-card { position: relative; display: flex; min-height: 150px; overflow: hidden; align-items: flex-end; padding: 16px; border: 1px solid var(--line); border-radius: var(--r); background: var(--sunken); color: var(--text); cursor: pointer; text-align: left; transition: border-color .14s, transform .14s, background .14s; }
+.deck-directory-card:hover { transform: translateY(-2px); border-color: var(--gold); background: var(--elevate); }
+.deck-directory-card::after { content: ""; position: absolute; inset: 0; z-index: 1; background: linear-gradient(180deg, rgba(6, 10, 7, .12), rgba(6, 10, 7, .42) 46%, rgba(6, 10, 7, .93)); pointer-events: none; }
+.deck-cover { position: absolute; inset: 0; display: grid; overflow: hidden; place-items: center; background: var(--elevate); color: var(--faint); }
 .deck-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.deck-cover.commander-cover { border-color: rgba(214, 180, 117, .42); }
-.deck-cover i { position: absolute; left: 5px; top: 5px; padding: 2px 5px; border-radius: 999px; background: rgba(8, 13, 10, .86); color: var(--gold); font: 700 8px var(--sans); font-style: normal; letter-spacing: .08em; text-transform: uppercase; }
-.deck-cover b { position: absolute; inset: auto 0 0; padding: 16px 6px 6px; overflow: hidden; background: linear-gradient(180deg, transparent, rgba(6, 10, 7, .92)); color: var(--text); font: 600 9.5px/1.15 var(--sans); text-overflow: ellipsis; white-space: nowrap; }
-.deck-cover.empty-cover .ico { width: 24px; height: 24px; color: var(--faint); }
-.deck-cover.empty-cover b { display: none; }
-.deck-directory-copy { display: flex; min-width: 0; flex-direction: column; justify-content: space-between; gap: 10px; padding: 3px 0; }
-.deck-directory-title { overflow: hidden; max-width: 100%; font: 500 19px/1.2 var(--display); text-overflow: ellipsis; white-space: nowrap; }
-.deck-directory-meta { color: var(--dim); font-size: 11px; line-height: 1.45; }
+.deck-cover.commander-cover::after { content: ""; position: absolute; inset: 0; border: 1px solid rgba(214, 180, 117, .42); pointer-events: none; }
+.deck-cover i { position: absolute; left: 10px; top: 10px; z-index: 2; padding: 3px 7px; border-radius: 999px; background: rgba(8, 13, 10, .82); color: var(--gold); font: 700 8px var(--sans); font-style: normal; letter-spacing: .08em; text-transform: uppercase; }
+.deck-cover.empty-cover .ico { width: 30px; height: 30px; color: var(--faint); }
+.deck-directory-copy { position: relative; z-index: 2; display: grid; min-width: 0; gap: 5px; width: 100%; }
+.deck-directory-title { overflow: hidden; max-width: 100%; color: #fff8e8; font: 600 25px/1.05 var(--display); text-shadow: 0 2px 12px rgba(0, 0, 0, .85); text-overflow: ellipsis; white-space: nowrap; }
+.deck-directory-meta { color: rgba(231, 230, 220, .82); font-size: 11px; line-height: 1.45; text-shadow: 0 1px 8px rgba(0, 0, 0, .9); }
 .head-actions { display: flex; gap: 8px; flex: 0 0 auto; }
 .collection-filter { width: min(310px, 34vw); margin: 0; }
 
