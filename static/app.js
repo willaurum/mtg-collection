@@ -1480,11 +1480,13 @@ function wireDeckCards() {
 async function searchDeckCard() {
   const name = ui.deckFilter.value.trim();
   if (!name) return;
+  // Keep this add tied to the destination selected when the search started.
+  const deckId = state.deckId;
+  const zone = state.deckZone;
   hideDeckSuggestions();
   try {
     const card = await getJson(`/api/card?name=${encodeURIComponent(name)}`);
-    const zone = state.deckZone;
-    const data = await mutate("/api/decks/add", { deck_id: state.deckId, card, zone },
+    const data = await mutate("/api/decks/add", { deck_id: deckId, card, zone },
       (result) => result.proxy_added
         ? `Proxy added to ${zone === "main" ? "main deck" : "maybeboard"}.`
         : `Added ${card.name} to ${zone === "main" ? "main deck" : "maybeboard"}.`);
