@@ -1125,6 +1125,24 @@ function openCardById(cardId) {
 const deckById = (id) => (state.library.decks || []).find((d) => d.id === id);
 const deckName = (id) => (deckById(id) || {}).name || "the deck";
 
+function deckCoverHtml(deck) {
+  const commanderLine = deck.commander_id
+    ? deck.cards.find((line) => line.card_id === deck.commander_id)
+    : null;
+  const coverLine = commanderLine || deck.cards.find((line) => line.zone === "main");
+  if (!coverLine) {
+    return '<span class="deck-cover empty-cover" aria-hidden="true"><svg class="ico"><use href="#i-decks"/></svg></span>';
+  }
+  const card = lineCard(coverLine);
+  const art = imageUrl(card, 0);
+  const name = lineName(coverLine);
+  return `<span class="deck-cover${commanderLine ? " commander-cover" : ""}" aria-hidden="true">
+    <img src="${art ? `/img?u=${encodeURIComponent(art)}` : ""}" alt="" loading="lazy">
+    ${commanderLine ? '<i>Commander</i>' : ""}
+    <b>${escapeHtml(name)}</b>
+  </span>`;
+}
+
 function renderDeckList() {
   const decks = state.library.decks || [];
   ui.deckListEmpty.hidden = decks.length > 0;
@@ -1143,8 +1161,11 @@ function renderDeckList() {
       <h2>${escapeHtml(folder)}</h2>
       <div class="deck-folder-cards">${items.map((deck) => `
         <button class="deck-directory-card" data-id="${escapeHtml(deck.id)}">
-          <span class="deck-directory-title">${escapeHtml(deck.name)}</span>
-          <span class="deck-directory-meta">${deck.count} main cards · ${deck.maybeboard_count || 0} maybeboard · ${deck.cards.length} unique</span>
+          ${deckCoverHtml(deck)}
+          <span class="deck-directory-copy">
+            <span class="deck-directory-title">${escapeHtml(deck.name)}</span>
+            <span class="deck-directory-meta">${deck.count} main cards · ${deck.maybeboard_count || 0} maybeboard · ${deck.cards.length} unique</span>
+          </span>
         </button>`).join("")}</div>
     </section>`).join("");
   ui.deckList.querySelectorAll(".deck-directory-card").forEach((item) => {
@@ -1458,15 +1479,11 @@ function renderAvailable() {
   const identity = commander ? new Set((commander.card || {}).color_identity || []) : null;
 
   const searchedHtml = searched && !state.entryById.has(searched.id) ? (() => {
-    const art = imageUrl(searched, 0);
     return `<li data-proxy="${escapeHtml(searched.id)}" title="Add a proxy to this deck">
-      <img src="${art ? `/img?u=${encodeURIComponent(art)}` : ""}" alt="" loading="lazy">
       <span class="an"><span>${escapeHtml(searched.name)}</span><small>Not in collection · add as proxy</small></span>
       <span class="free proxy-count">×0</span></li>`;
   })() : "";
   ui.availList.innerHTML = searchedHtml + free.map((entry) => {
-    const art = imageUrl(entry.card || {}, 0);
-    const src = art ? `/img?u=${encodeURIComponent(art)}` : "";
     // Flag a colour clash here too, so it is visible before the card goes in.
     const outside = identity
       ? ((entry.card || {}).color_identity || []).filter((c) => !identity.has(c)) : [];
@@ -1476,7 +1493,6 @@ function renderAvailable() {
     return `
       <li data-id="${escapeHtml(entry.id)}" class="${outside.length ? "off-colour" : ""}"
           title="${escapeHtml(tip)}">
-        <img src="${src}" alt="" loading="lazy">
         <span class="an"><span>${escapeHtml(entry.name)}</span>
           <small>${escapeHtml((entry.set || "").toUpperCase())} #${escapeHtml(entry.collector_number || "")}</small>
         </span>
