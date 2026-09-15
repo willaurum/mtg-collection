@@ -329,7 +329,7 @@ def api_deck_add():
     return _store_call(lambda: store.deck_add(
         auth.user_id(), payload.get("deck_id"), payload.get("card_id"),
         int(payload.get("quantity", 1)), payload.get("card"), payload.get("zone", "main")),
-        lambda result: {"entry_ids": ([] if result["proxy_added"] else [result["card_id"]]),
+        lambda result: {"entry_ids": [result["card_id"]],
                         "deck_ids": [result["deck_id"]], "deck_id": result["deck_id"],
                         "proxy_added": result["proxy_added"]})
 

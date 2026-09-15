@@ -66,7 +66,6 @@ const ui = {
   deckCopyBtn: el("deckCopyBtn"),
   deckGrid: el("deckGrid"), deckEmpty: el("deckEmpty"), deckFilter: el("deckFilter"),
   deckStats: el("deckStats"),
-  availList: el("availList"), availEmpty: el("availEmpty"),
   deleteDeckBtn: el("deleteDeckBtn"),
   deckLegality: el("deckLegality"), deckProblems: el("deckProblems"),
   deckMenuWrap: el("deckMenuWrap"), deckPicker: el("deckPicker"), addToDeckBtn: el("addToDeckBtn"),
@@ -125,9 +124,9 @@ const state = {
   commandItems: [],
   commandIndex: 0,
   pendingProfile: null,
-  deckSearchCard: null,
   deckZone: "main",
   deckSuggestionNames: [],
+  deckActive: -1,
   deckSuggestTimer: null,
   deckSuggestSeq: 0,
   deckImportToken: null,
@@ -465,6 +464,7 @@ function hideDeckSuggestions() {
   ui.deckSuggestions.hidden = true;
   ui.deckSuggestions.innerHTML = "";
   state.deckSuggestionNames = [];
+  state.deckActive = -1;
 }
 
 function chooseDeckSuggestion(name) {
@@ -476,15 +476,33 @@ function chooseDeckSuggestion(name) {
 function showDeckSuggestions(names) {
   if (!names.length) return hideDeckSuggestions();
   state.deckSuggestionNames = names;
+  state.deckActive = -1;
   ui.deckSuggestions.innerHTML = names.map((name) =>
     `<li data-name="${escapeHtml(name)}">${escapeHtml(name)}</li>`).join("");
-  ui.deckSuggestions.querySelectorAll("li").forEach((item) => {
+  ui.deckSuggestions.querySelectorAll("li").forEach((item, index) => {
+    item.addEventListener("mouseenter", () => highlightDeckSuggestion(index));
     item.addEventListener("mousedown", (event) => {
       event.preventDefault();
       chooseDeckSuggestion(item.dataset.name);
     });
   });
   ui.deckSuggestions.hidden = false;
+}
+
+function highlightDeckSuggestion(index) {
+  state.deckActive = index;
+  [...ui.deckSuggestions.children].forEach((item, i) =>
+    item.classList.toggle("active", i === index));
+}
+
+function moveDeckSuggestion(step) {
+  if (!state.deckSuggestionNames.length) return;
+  const count = state.deckSuggestionNames.length;
+  const next = state.deckActive === -1
+    ? (step > 0 ? 0 : count - 1)
+    : (state.deckActive + step + count) % count;
+  highlightDeckSuggestion(next);
+  ui.deckSuggestions.children[next].scrollIntoView({ block: "nearest" });
 }
 
 function scheduleDeckSuggest() {
@@ -1362,7 +1380,6 @@ function renderDeckPanel() {
     }).join("");
 
   wireDeckCards();
-  renderAvailable();
 }
 
 function renderDeckSummary(deck) {
@@ -1461,73 +1478,19 @@ function wireDeckCards() {
   });
 }
 
-function renderAvailable() {
-  const filter = ui.deckFilter.value.trim().toLowerCase();
-  const zone = state.deckZone;
-  const free = (state.library.entries || [])
-    .filter((e) => zone === "maybeboard" || e.available > 0)
-    .filter((e) => !filter || (e.name || "").toLowerCase().includes(filter))
-    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-
-  // Keep Scryfall's match visible even when it normalises the spelling or
-  // resolves a partial name to the card's full name.
-  const searched = state.deckSearchCard && filter ? state.deckSearchCard : null;
-  ui.availEmpty.hidden = free.length > 0 || Boolean(searched);
-  ui.availEmpty.textContent = filter && !free.length
-    ? "Nothing free matches that."
-    : "Every copy you own is already in a deck.";
-
-  const deck = deckById(state.deckId) || {};
-  const commanderLine = deck.cards && deck.cards.find((line) => line.card_id === deck.commander_id);
-  const commander = commanderLine ? { name: lineName(commanderLine), card: lineCard(commanderLine) } : null;
-  const identity = commander ? new Set((commander.card || {}).color_identity || []) : null;
-
-  const searchedHtml = searched && !state.entryById.has(searched.id) ? (() => {
-    return `<li data-proxy="${escapeHtml(searched.id)}" title="Add a proxy to this deck">
-      <span class="an"><span>${escapeHtml(searched.name)}</span><small>Not in collection · add as proxy</small></span>
-      <span class="free proxy-count">×0</span></li>`;
-  })() : "";
-  ui.availList.innerHTML = searchedHtml + free.map((entry) => {
-    // Flag a colour clash here too, so it is visible before the card goes in.
-    const outside = identity
-      ? ((entry.card || {}).color_identity || []).filter((c) => !identity.has(c)) : [];
-    const tip = outside.length
-      ? `Outside ${commander.name}'s ${identityLabel([...identity])} identity`
-      : `Add to ${zone === "main" ? "main deck" : "maybeboard"}`;
-    return `
-      <li data-id="${escapeHtml(entry.id)}" class="${outside.length ? "off-colour" : ""}"
-          title="${escapeHtml(tip)}">
-        <span class="an"><span>${escapeHtml(entry.name)}</span>
-          <small>${escapeHtml((entry.set || "").toUpperCase())} #${escapeHtml(entry.collector_number || "")}</small>
-        </span>
-        <span class="free">${entry.available}</span>
-      </li>`;
-  }).join("");
-
-  [...ui.availList.children].forEach((item) => {
-    item.addEventListener("click", () => {
-      if (item.dataset.proxy) {
-        mutate("/api/decks/add", { deck_id: state.deckId, card: state.deckSearchCard, zone },
-          () => "Proxy added.");
-      } else {
-        mutate("/api/decks/add", { deck_id: state.deckId, card_id: item.dataset.id, zone },
-          () => `Added to ${zone === "main" ? "main deck" : "maybeboard"}.`);
-      }
-    });
-  });
-}
-
 async function searchDeckCard() {
   const name = ui.deckFilter.value.trim();
   if (!name) return;
   hideDeckSuggestions();
   try {
     const card = await getJson(`/api/card?name=${encodeURIComponent(name)}`);
-    state.deckSearchCard = card;
-    renderAvailable();
+    const zone = state.deckZone;
+    const data = await mutate("/api/decks/add", { deck_id: state.deckId, card, zone },
+      (result) => result.proxy_added
+        ? `Proxy added to ${zone === "main" ? "main deck" : "maybeboard"}.`
+        : `Added ${card.name} to ${zone === "main" ? "main deck" : "maybeboard"}.`);
+    if (data) ui.deckFilter.value = "";
   } catch (error) {
-    state.deckSearchCard = null;
-    renderAvailable();
     if (error.suggestions && error.suggestions.length) {
       showDeckSuggestions(error.suggestions);
       setStatus("Choose the card you mean from the matches.", true);
@@ -1542,7 +1505,6 @@ function setDeckZone(zone) {
   state.deckZone = zone;
   ui.deckZoneBtn.textContent = zone === "main" ? "Main deck" : "Maybeboard";
   ui.deckZonePicker.hidden = true;
-  renderAvailable();
 }
 
 async function newDeck() {
@@ -1684,6 +1646,7 @@ function openDeck(deckId) {
   state.deckId = deckId;
   state.cardSeq++;          // same here: a slow search must not pull us back
   ui.deckFilter.value = "";
+  hideDeckSuggestions();
   showView(ui.deckPanel, "deck");   // the deck's own row in the rail lights up
   renderDeckList();
   renderDeckPanel();
@@ -2153,14 +2116,18 @@ ui.deckExportDialog.addEventListener("click", (event) => {
 });
 ui.proxyListBtn.addEventListener("click", openProxyList);
 ui.deckFilter.addEventListener("input", () => {
-  state.deckSearchCard = null;
-  renderAvailable();
   scheduleDeckSuggest();
 });
 ui.deckFilter.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") { event.preventDefault(); searchDeckCard(); }
-  if (event.key === "Escape") hideDeckSuggestions();
+  if (event.key === "ArrowDown") { event.preventDefault(); moveDeckSuggestion(1); }
+  else if (event.key === "ArrowUp") { event.preventDefault(); moveDeckSuggestion(-1); }
+  else if (event.key === "Enter") {
+    event.preventDefault();
+    if (state.deckActive >= 0) chooseDeckSuggestion(state.deckSuggestionNames[state.deckActive]);
+    else searchDeckCard();
+  } else if (event.key === "Escape") hideDeckSuggestions();
 });
+ui.deckFilter.addEventListener("blur", () => setTimeout(hideDeckSuggestions, 120));
 ui.deckSearchBtn.addEventListener("click", searchDeckCard);
 ui.deckZoneBtn.addEventListener("click", () => {
   ui.deckZonePicker.hidden = !ui.deckZonePicker.hidden;

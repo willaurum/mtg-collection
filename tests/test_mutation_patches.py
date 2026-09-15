@@ -178,6 +178,38 @@ class MutationPatchTests(unittest.TestCase):
         self.assertEqual(moved["summary"]["allocated"], 1)
         self.assertEqual(moved["entries"][0]["available"], 0)
 
+    def test_lookup_add_uses_proxy_when_no_owned_copy_is_free(self):
+        self.post("/api/collection/add", {"card": card("bolt", "Lightning Bolt")})
+        first_deck = self.post("/api/decks/create", {"name": "First deck"})["deck_id"]
+        second_deck = self.post("/api/decks/create", {"name": "Second deck"})["deck_id"]
+
+        owned = self.post("/api/decks/add", {"deck_id": first_deck, "card_id": "bolt"})
+        self.assertFalse(owned["proxy_added"])
+        self.assertEqual(owned["summary"]["allocated"], 1)
+        self.assertEqual(owned["entries"][0]["available"], 0)
+
+        lookup = self.post("/api/decks/add", {
+            "deck_id": second_deck,
+            "card": card("bolt", "Lightning Bolt"),
+        })
+        line = lookup["decks"][0]["cards"][0]
+        self.assertTrue(lookup["proxy_added"])
+        self.assertTrue(line["proxy"])
+        self.assertEqual(line["quantity"], 1)
+        self.assertEqual(lookup["summary"]["allocated"], 1)
+        self.assertEqual(lookup["entries"][0]["available"], 0)
+
+        converted = self.post("/api/decks/add", {
+            "deck_id": first_deck,
+            "card": card("bolt", "Lightning Bolt"),
+        })
+        converted_line = converted["decks"][0]["cards"][0]
+        self.assertTrue(converted["proxy_added"])
+        self.assertTrue(converted_line["proxy"])
+        self.assertEqual(converted_line["quantity"], 2)
+        self.assertEqual(converted["summary"]["allocated"], 0)
+        self.assertEqual(converted["entries"][0]["available"], 1)
+
     def test_deck_import_can_reserve_owned_cards_or_add_missing_copies(self):
         store.add_card(self.user_id, card("bolt", "Lightning Bolt"), quantity=1)
         resolved = [

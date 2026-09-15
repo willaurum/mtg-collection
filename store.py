@@ -375,18 +375,27 @@ def deck_add(user_id, deck_id, card_id=None, quantity=1, card=None, zone="main")
             allocated = sum(item["quantity"] for item in held)
             free = int(owned["quantity"]) - allocated
             if free < quantity:
-                name = conn.execute("SELECT name FROM cards WHERE id = ?",
-                                    (card_id,)).fetchone()
-                where = ", ".join("%s (%d)" % (h["deck_name"], h["quantity"]) for h in held)
-                raise StoreError(
-                    "You own %d %s and every spare copy is already in a deck%s."
-                    % (int(owned["quantity"]), name["name"] if name else "of that card",
-                       " - " + where if where else ""))
+                if card:
+                    # A resolved lookup may intentionally add a proxy when the
+                    # collection has no free copy left.
+                    proxy = True
+                else:
+                    name = conn.execute("SELECT name FROM cards WHERE id = ?",
+                                        (card_id,)).fetchone()
+                    where = ", ".join("%s (%d)" % (h["deck_name"], h["quantity"]) for h in held)
+                    raise StoreError(
+                        "You own %d %s and every spare copy is already in a deck%s."
+                        % (int(owned["quantity"]), name["name"] if name else "of that card",
+                           " - " + where if where else ""))
 
         conn.execute(
             """INSERT INTO deck_cards (deck_id, card_id, quantity, zone, proxy) VALUES (?, ?, ?, ?, ?)
                ON CONFLICT (deck_id, card_id)
-               DO UPDATE SET quantity = quantity + excluded.quantity""",
+               DO UPDATE SET quantity = quantity + excluded.quantity,
+                             proxy = CASE
+                               WHEN excluded.proxy = 1 THEN 1
+                               ELSE deck_cards.proxy
+                             END""",
             (deck_id, card_id, quantity, zone, 1 if proxy else 0))
         conn.execute("UPDATE decks SET updated = ? WHERE id = ?", (_now(), deck_id))
     return {"deck_id": deck_id, "card_id": card_id, "proxy_added": proxy}
