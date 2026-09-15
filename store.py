@@ -532,15 +532,16 @@ def collection_card_ids(user_id, conn=None):
     )]
 
 
-def refresh_collection_prices(user_id, cards):
+def refresh_collection_prices(user_id, cards, complete=True):
     """Save fresh Scryfall payloads, then mark this user's daily refresh complete."""
     with db.transaction() as conn:
         for card in cards:
             remember_card(card, conn)
-        conn.execute(
-            "INSERT OR IGNORE INTO price_refreshes (user_id, day) VALUES (?, ?)",
-            (user_id, datetime.date.today().isoformat()),
-        )
+        if complete:
+            conn.execute(
+                "INSERT OR IGNORE INTO price_refreshes (user_id, day) VALUES (?, ?)",
+                (user_id, datetime.date.today().isoformat()),
+            )
         record_price_snapshot(user_id, conn)
 
 

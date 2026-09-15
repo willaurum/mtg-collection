@@ -25,6 +25,9 @@ const RECENT_KEY = "mtg.recent";
 
 const el = (id) => document.getElementById(id);
 const ui = {
+  settingsBtn: el("settingsBtn"), settingsPanel: el("settingsPanel"),
+  settingsCollectionValue: el("settingsCollectionValue"), refreshAllPricesBtn: el("refreshAllPricesBtn"),
+  settingsPriceStatus: el("settingsPriceStatus"),
   search: el("search"), suggestions: el("suggestions"),
   randomBtn: el("randomBtn"), toast: el("toast"), navCard: el("navCard"),
   brandBtn: el("brandBtn"),
@@ -571,6 +574,7 @@ async function mutate(url, body, success) {
 }
 
 function applySummary(summary) {
+  ui.settingsCollectionValue.textContent = money(summary.value);
   ui.collCount.textContent = summary.total;
   // The folder lives one click away in the rail; it is noise in the heading.
   const parts = [`${summary.total} card${summary.total === 1 ? "" : "s"}`,
@@ -1407,6 +1411,32 @@ async function renderUnownedPrice(deck) {
   }
 }
 
+async function refreshAllPrices() {
+  if (ui.refreshAllPricesBtn.disabled) return;
+  ui.refreshAllPricesBtn.disabled = true;
+  ui.refreshAllPricesBtn.textContent = "Refreshing…";
+  ui.settingsPriceStatus.textContent = "Updating all prices. Large collections and decks may take a moment.";
+  try {
+    const library = await getJson("/api/prices/refresh", { method: "POST" });
+    state.unownedPriceKey = null;
+    state.priceRefreshChecked = !library.prices_stale;
+    applyLibrary(library);
+    if (state.card) {
+      const fresh = state.entryById.get(state.card.id)?.card ||
+        library.decks.flatMap((deck) => deck.cards).find((line) => line.card_id === state.card.id)?.card;
+      if (fresh) { state.card = fresh; ui.priceChips.innerHTML = priceChipsHtml(fresh); }
+    }
+    ui.settingsPriceStatus.textContent = library.prices_stale
+      ? "Some prices could not be refreshed. Previous values are kept where available; please try again."
+      : `All prices refreshed at ${new Date().toLocaleTimeString()}.`;
+  } catch (error) {
+    ui.settingsPriceStatus.textContent = `Prices could not be refreshed. ${error.message}`;
+  } finally {
+    ui.refreshAllPricesBtn.disabled = false;
+    ui.refreshAllPricesBtn.textContent = "Refresh all prices";
+  }
+}
+
 function renderDeckSummary(deck) {
   const unique = deck.cards.length;
   const commanderLine = deck.cards.find((line) => line.card_id === deck.commander_id);
@@ -1582,6 +1612,7 @@ function disarmDelete() {
 /* ---------------------------------------------------------------- views */
 
 const NAV = {
+  settings: () => ui.settingsBtn,
   card: () => ui.navCard,
   collection: () => ui.viewCollectionBtn,
   import: () => ui.importBtn,
@@ -1591,10 +1622,17 @@ const NAV = {
 function showView(panel, navKey) {
   disarmDelete();
   hideCardPreview();
-  [ui.cardPanel, ui.collectionPanel, ui.deckMenuPanel, ui.deckPanel, ui.importPanel]
+  [ui.cardPanel, ui.collectionPanel, ui.deckMenuPanel, ui.deckPanel, ui.importPanel, ui.settingsPanel]
     .forEach((node) => { node.hidden = node !== panel; });
   Object.entries(NAV).forEach(([key, node]) =>
     node().classList.toggle("active", key === navKey));
+}
+
+function showSettingsView() {
+  state.deckId = null;
+  state.cardSeq++;
+  showView(ui.settingsPanel, "settings");
+  ui.settingsCollectionValue.textContent = money(state.library.summary.value);
 }
 
 function showCollectionView() {
@@ -1695,6 +1733,7 @@ function showImportView() {
 
 function commandChoices() {
   const items = [
+    { label: "Open Settings", detail: "Collection value and price refresh", run: showSettingsView },
     { label: "Search cards", detail: "Focus the Scryfall search", run: () => {
       ui.search.focus(); ui.search.select();
     } },
@@ -2190,6 +2229,8 @@ ui.deckCategory.addEventListener("keydown", (event) => {
   }
 });
 
+ui.settingsBtn.addEventListener("click", showSettingsView);
+ui.refreshAllPricesBtn.addEventListener("click", refreshAllPrices);
 ui.logoutBtn.addEventListener("click", signOut);
 
 loadIdentity();

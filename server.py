@@ -164,18 +164,19 @@ def _library(**extra):
     return jsonify(payload)
 
 
-def _refresh_current_prices(user_id):
+def _refresh_current_prices(user_id, force=False):
     """Refresh every printing a user owns or plays, at most once per day."""
     refreshed = False
     stale = False
-    if store.price_refresh_due(user_id):
+    if force or store.price_refresh_due(user_id):
         try:
-            cards, _missing = scryfall.cards_by_identifiers(
+            cards, missing = scryfall.cards_by_identifiers(
                 [{"id": card_id} for card_id in store.collection_card_ids(user_id)]
             )
-            store.refresh_collection_prices(user_id, cards)
+            store.refresh_collection_prices(user_id, cards, complete=not missing)
             refreshed = True
-        except scryfall.ScryfallError:
+            stale = bool(missing)
+        except (scryfall.ScryfallError, TimeoutError):
             # A history based on the last cached prices is still more helpful
             # than an error modal when the Pi temporarily has no internet.
             stale = True
@@ -228,6 +229,30 @@ def api_price_history():
 @auth.api_login_required
 def api_price_refresh():
     return _library(**_refresh_current_prices(auth.user_id()))
+
+
+@app.post("/api/prices/refresh")
+@auth.api_login_required
+def api_price_force_refresh():
+    user_id = auth.user_id()
+    refresh = _refresh_current_prices(user_id, force=True)
+    scryfall.clear_cheapest_price_cache()
+    # Warm every deck's missing-card estimate, including decks not currently open.
+    cards = {}
+    for deck in store.library(user_id)["decks"]:
+        for item in store.unowned_deck_cards(user_id, deck["id"]):
+            card = item["card"]
+            cards[card.get("oracle_id") or card["name"]] = card
+    def lookup(card):
+        try:
+            scryfall.cheapest_printing_usd(card)
+            return True
+        except (scryfall.ScryfallError, TimeoutError):
+            return False
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        if not all(list(executor.map(lookup, cards.values()))):
+            refresh["prices_stale"] = True
+    return _library(**refresh)
 
 
 @app.get("/api/profile/export")

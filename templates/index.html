@@ -16,6 +16,9 @@
   <symbol id="i-search" viewBox="0 0 16 16">
     <circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/>
   </symbol>
+  <symbol id="i-settings" viewBox="0 0 16 16">
+    <path d="M2 4h12M2 8h12M2 12h12"/><circle cx="5" cy="4" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="6" cy="12" r="1.5"/>
+  </symbol>
   <symbol id="i-card" viewBox="0 0 16 16">
     <rect x="3" y="1.5" width="10" height="13" rx="1.5"/><path d="M5.5 11.5h5"/>
   </symbol>
@@ -92,6 +95,9 @@
     </div>
 
     <div class="rail-foot">
+      <button class="nav" id="settingsBtn" data-view="settings">
+        <svg class="ico"><use href="#i-settings"/></svg><span>Settings</span>
+      </button>
       <div class="whoami" id="whoami" hidden>
         <span class="who">Signed in as <b id="whoName"></b></span>
         <button class="link-btn" id="logoutBtn" style="width:auto">Sign out</button>
@@ -104,6 +110,25 @@
   </nav>
 
   <main class="content">
+    <section class="view" id="settingsPanel" hidden>
+      <header class="view-head"><div><h1>Settings</h1><p class="sub">Manage your app and collection.</p></div></header>
+      <div class="settings-body">
+        <section class="settings-section" aria-labelledby="settingsPricesTitle">
+          <h2 id="settingsPricesTitle">Prices</h2>
+          <p class="sub">Prices are estimates in USD from Scryfall.</p>
+          <div class="settings-value">
+            <span>Total collection value</span>
+            <strong id="settingsCollectionValue" aria-live="polite">$0.00</strong>
+          </div>
+          <p class="sub">Owned copies at their nonfoil prices, including cards in decks. Cards without a USD price contribute no value.</p>
+          <div class="settings-refresh">
+            <button class="btn primary" id="refreshAllPricesBtn" type="button">Refresh all prices</button>
+            <p class="sub">Update collection and deck prices, plus cheapest-printing estimates, even if already refreshed today.</p>
+          </div>
+          <p class="sub" id="settingsPriceStatus" role="status" aria-live="polite"></p>
+        </section>
+      </div>
+    </section>
 
     <!-- ------------------------------------------------------- card -->
     <section class="view" id="cardPanel" hidden>

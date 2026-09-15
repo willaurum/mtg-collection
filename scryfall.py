@@ -195,6 +195,10 @@ def cheapest_printing_usd(card):
     return _cheapest_printing_usd(identity, int(time.time() // 86400))
 
 
+def clear_cheapest_price_cache():
+    _cheapest_printing_usd.cache_clear()
+
+
 @functools.lru_cache(maxsize=2048)
 def _cheapest_printing_usd(identity, day):
     query = urllib.parse.urlencode({"q": identity + " game:paper",

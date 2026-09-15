@@ -213,6 +213,49 @@ class MutationPatchTests(unittest.TestCase):
         self.assertEqual(converted["summary"]["allocated"], 0)
         self.assertEqual(converted["entries"][0]["available"], 1)
 
+    def test_force_refresh_bypasses_daily_limit_and_updates_all_price_types(self):
+        store.add_card(self.user_id, card("owned", "Owned Card", "1.00"), quantity=3)
+        deck_id = store.create_deck(self.user_id, "Prices")
+        store.deck_add(self.user_id, deck_id, card=card("proxy", "Proxy Card", "2.00"))
+        store.refresh_collection_prices(self.user_id, [])
+        self.assertFalse(store.price_refresh_due(self.user_id))
+        with patch("scryfall.cards_by_identifiers", return_value=(
+                [card("owned", "Owned Card", "4.00"), card("proxy", "Proxy Card", "5.00")], [])) as batch, \
+             patch("scryfall.clear_cheapest_price_cache") as clear, \
+             patch("scryfall.cheapest_printing_usd", return_value=Decimal("0.25")) as cheapest:
+            result = self.post("/api/prices/refresh", {})
+        self.assertEqual(result["summary"]["value"], 12.0)
+        self.assertEqual(result["decks"][0]["value"], 5.0)
+        self.assertTrue(result["prices_refreshed"])
+        self.assertFalse(result["prices_stale"])
+        self.assertEqual(batch.call_args.args[0], [{"id": "owned"}, {"id": "proxy"}])
+        clear.assert_called_once()
+        cheapest.assert_called_once()
+        self.assertEqual(store.price_history(self.user_id)["current"], 12.0)
+
+    def test_force_refresh_reports_partial_and_failed_updates(self):
+        store.add_card(self.user_id, card("owned", "Owned Card", "2.00"), quantity=2)
+        with patch("scryfall.cards_by_identifiers", return_value=([], [{"id": "owned"}])):
+            result = self.post("/api/prices/refresh", {})
+        self.assertTrue(result["prices_stale"])
+        self.assertEqual(result["summary"]["value"], 4.0)
+        self.assertTrue(store.price_refresh_due(self.user_id))
+        with patch("scryfall.cards_by_identifiers", side_effect=scryfall.ScryfallError("Offline")):
+            result = self.post("/api/prices/refresh", {})
+        self.assertTrue(result["prices_stale"])
+        self.assertFalse(result["prices_refreshed"])
+        self.assertEqual(result["summary"]["value"], 4.0)
+
+    def test_force_refresh_reports_cheapest_lookup_failure_and_requires_login(self):
+        deck_id = store.create_deck(self.user_id, "Prices")
+        store.deck_add(self.user_id, deck_id, card=card("proxy", "Proxy Card"))
+        with patch("scryfall.cards_by_identifiers", return_value=([card("proxy", "Proxy Card")], [])), \
+             patch("scryfall.cheapest_printing_usd", side_effect=scryfall.ScryfallError("Offline")):
+            self.assertTrue(self.post("/api/prices/refresh", {})["prices_stale"])
+        with self.client.session_transaction() as session:
+            session.clear()
+        self.assertEqual(self.client.post("/api/prices/refresh").status_code, 401)
+
     def test_unowned_price_counts_shortfall_across_printings_and_excludes_maybeboard(self):
         store.add_card(self.user_id, card("owned-bolt", "Lightning Bolt"), quantity=2)
         deck_id = self.post("/api/decks/create", {"name": "Burn"})["deck_id"]

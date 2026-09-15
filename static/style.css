@@ -366,6 +366,14 @@ body.busy .progress { opacity: 1; }
 /* ------------------------------------------------------------- views */
 
 .content { min-width: 0; background: var(--surface); overflow: hidden; }
+.settings-body { padding: 0 26px 28px; overflow-y: auto; }
+.settings-section { max-width: 650px; padding: 22px; border: 1px solid var(--line); border-radius: var(--r); background: var(--elevate); }
+.settings-section h2 { margin: 0 0 8px; font: 500 21px var(--display); }
+.settings-section .sub { line-height: 1.6; }
+.settings-value { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 12px; margin: 24px 0 8px; }
+.settings-value strong { color: var(--gold); font: 500 32px var(--display); }
+.settings-refresh { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
+.settings-refresh .sub { margin-top: 10px; }
 
 .view { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 
