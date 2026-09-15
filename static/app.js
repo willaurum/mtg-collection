@@ -686,9 +686,8 @@ function renderCollection() {
         (card.type_line || "").toLocaleLowerCase().includes(filters.type);
       const rarity = filters.rarity === "all" || card.rarity === filters.rarity;
       const selectedColors = filters.colors;
-      const colour = selectedColors.size === 0 ||
-        (selectedColors.has("colorless") && colours.length === 0) ||
-        [...selectedColors].some((color) => color !== "colorless" && colours.includes(color));
+      const colour = [...selectedColors].every((color) =>
+        color === "colorless" ? colours.length === 0 : colours.includes(color));
       return terms.every((term) => text.includes(term)) && availability && type && rarity && colour &&
         (!state.unusedOnly || (entry.allocated || 0) === 0);
     })
@@ -2195,5 +2194,5 @@ ui.logoutBtn.addEventListener("click", signOut);
 
 loadIdentity();
 restoreRecent();
+showCollectionView();
 loadLibrary();
-random();
