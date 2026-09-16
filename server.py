@@ -423,6 +423,19 @@ def api_deck_add():
                         "proxy_added": result["proxy_added"]})
 
 
+@app.post("/api/decks/printing")
+@auth.api_login_required
+def api_deck_printing():
+    payload = request.get_json(silent=True) or {}
+    card = payload.get("card")
+    return _store_call(lambda: store.change_deck_printing(
+        auth.user_id(), payload.get("deck_id"), payload.get("card_id"), card),
+        lambda deck_id: {"entry_ids": [payload.get("card_id"), card["id"]],
+                         "removed_entry_ids": [payload.get("card_id")]
+                         if not store.entry(auth.user_id(), payload.get("card_id")) else [],
+                         "deck_ids": [deck_id], "deck_id": deck_id})
+
+
 @app.post("/api/decks/remove")
 @auth.api_login_required
 def api_deck_remove():

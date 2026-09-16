@@ -94,6 +94,75 @@ class MutationPatchTests(unittest.TestCase):
         self.assertEqual(deleted["removed_decks"], [deck_id])
         self.assertEqual(deleted["entries"][0]["available"], 1)
 
+    def test_printing_change_moves_only_deck_copies_and_preserves_commander(self):
+        store.add_card(self.user_id, card("old", "Bolt"), 4)
+        store.add_card(self.user_id, card("new", "Bolt"), 1)
+        deck = store.create_deck(self.user_id, "Burn")
+        other = store.create_deck(self.user_id, "Other")
+        store.deck_add(self.user_id, deck, "old", 2)
+        store.deck_add(self.user_id, deck, "new")
+        store.deck_add(self.user_id, other, "old")
+        store.set_commander(self.user_id, deck, "old")
+        result = self.post("/api/decks/printing", {
+            "deck_id": deck, "card_id": "old", "card": card("new", "Bolt", "2.00")})
+        entries = {item["id"]: item for item in result["entries"]}
+        self.assertEqual(entries["old"]["quantity"], 2)
+        self.assertEqual(entries["old"]["available"], 1)
+        self.assertEqual(entries["new"]["quantity"], 3)
+        self.assertEqual(entries["new"]["available"], 0)
+        self.assertEqual(result["decks"][0]["commander_id"], "new")
+        self.assertEqual(len(result["decks"][0]["cards"]), 1)
+        self.assertEqual(result["decks"][0]["cards"][0]["quantity"], 3)
+        self.assertEqual(store.deck_state(self.user_id, other)["cards"][0]["card_id"], "old")
+
+    def test_printing_change_removes_empty_collection_row(self):
+        store.add_card(self.user_id, card("old", "Bolt"))
+        deck = store.create_deck(self.user_id)
+        store.deck_add(self.user_id, deck, "old")
+        result = self.post("/api/decks/printing", {
+            "deck_id": deck, "card_id": "old", "card": card("new", "Bolt")})
+        self.assertIn("old", result["removed_entries"])
+        self.assertEqual(result["summary"]["total"], 1)
+
+    def test_proxy_printing_change_does_not_change_collection(self):
+        store.add_card(self.user_id, card("old", "Bolt"), 2)
+        deck = store.create_deck(self.user_id)
+        store.deck_add(self.user_id, deck, "old")
+        store.set_proxy(self.user_id, deck, "old", True)
+        self.post("/api/decks/printing", {
+            "deck_id": deck, "card_id": "old", "card": card("new", "Bolt")})
+        self.assertEqual(store.entry(self.user_id, "old")["quantity"], 2)
+        self.assertIsNone(store.entry(self.user_id, "new"))
+        self.assertTrue(store.deck_state(self.user_id, deck)["cards"][0]["proxy"])
+
+    def test_printing_change_rejects_conflicts_other_cards_and_other_users(self):
+        store.add_card(self.user_id, card("old", "Bolt"))
+        deck = store.create_deck(self.user_id)
+        store.deck_add(self.user_id, deck, "old")
+        store.deck_add(self.user_id, deck, card=card("new", "Bolt"), zone="maybeboard")
+        before = store.export_profile(self.user_id)
+        for replacement in (card("new", "Bolt"), card("bird", "Bird"), None):
+            response = self.client.post("/api/decks/printing", json={
+                "deck_id": deck, "card_id": "old", "card": replacement})
+            self.assertEqual(response.status_code, 409)
+        self.assertEqual(store.export_profile(self.user_id), before)
+        other_user = auth.create_user("other-user", "a long test password")
+        with self.assertRaises(store.StoreError):
+            store.change_deck_printing(other_user, deck, "old", card("third", "Bolt"))
+
+    def test_maybeboard_printing_change_respects_allocated_copies(self):
+        store.add_card(self.user_id, card("old", "Bolt"))
+        deck = store.create_deck(self.user_id)
+        other = store.create_deck(self.user_id)
+        store.deck_add(self.user_id, deck, "old", zone="maybeboard")
+        store.deck_add(self.user_id, other, "old")
+        with self.assertRaises(store.StoreError):
+            store.change_deck_printing(self.user_id, deck, "old", card("new", "Bolt"))
+        store.add_card(self.user_id, card("old", "Bolt"))
+        store.change_deck_printing(self.user_id, deck, "old", card("new", "Bolt"))
+        self.assertEqual(store.deck_state(self.user_id, deck)["cards"][0]["zone"], "maybeboard")
+        self.assertEqual(store.entry(self.user_id, "old")["quantity"], 1)
+
     def test_profile_export_import_preserves_cards_and_decks(self):
         store.add_card(self.user_id, card("bolt", "Lightning Bolt"), quantity=2)
         deck_id = store.create_deck(self.user_id, "Burn")

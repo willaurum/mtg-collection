@@ -1096,6 +1096,58 @@ function openDeckDetail(deckId, cardId) {
     mutate("/api/decks/remove", { deck_id: deckId, card_id: cardId }, () => "Removed one copy.");
     closeCardDetail();
   });
+  loadDetailPrintings(deckId, line, card);
+}
+
+async function loadDetailPrintings(deckId, line, card) {
+  const section = document.createElement("section");
+  section.className = "detail-info-section detail-printing";
+  section.innerHTML = `<label for="detailPrinting">Change printing</label>
+    <select id="detailPrinting" class="deck-picker" disabled aria-describedby="detailPrintingHelp"></select>
+    <p id="detailPrintingHelp" class="detail-meta">${line.proxy
+      ? "Changes all copies on this proxy row. Your collection stays the same."
+      : "Changes all copies on this deck row and the same number in your collection."}</p>
+    <p class="detail-meta" data-printing-status role="status">Loading printings…</p>`;
+  detailFactsElement().appendChild(section);
+  const select = section.querySelector("select");
+  const status = section.querySelector("[data-printing-status]");
+  const label = (item) => `${item.set_name || (item.set || "").toUpperCase()} #${item.collector_number || "?"} · ${item.released_at || "Unknown date"}`;
+  select.add(new Option(label(card), card.id));
+  try {
+    const data = card.prints_search_uri
+      ? await getJson(`/api/printings?uri=${encodeURIComponent(card.prints_search_uri)}`) : [];
+    if (!section.isConnected || ui.cardDetailDialog.hidden) return;
+    const printings = [card, ...data.filter((item) => item.id !== card.id)];
+    select.replaceChildren(...printings.map((item) => new Option(label(item), item.id)));
+    select.value = card.id;
+    select.disabled = printings.length < 2;
+    status.textContent = printings.length < 2 ? "No other printings available." : "";
+    select.addEventListener("change", async () => {
+      const chosen = printings.find((item) => item.id === select.value);
+      if (!chosen || chosen.id === card.id) return;
+      const buttons = [...ui.detailActions.querySelectorAll("button")];
+      select.disabled = true;
+      buttons.forEach((button) => { button.disabled = true; });
+      status.textContent = "Saving printing…";
+      try {
+        const result = await getJson("/api/decks/printing", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deck_id: deckId, card_id: card.id, card: chosen }),
+        });
+        applyPatch(result);
+        setStatus(line.proxy ? "Proxy printing updated." : "Printing updated in deck and collection.");
+        if (section.isConnected && !ui.cardDetailDialog.hidden) openDeckDetail(deckId, chosen.id);
+      } catch (error) {
+        select.value = card.id;
+        status.textContent = error.message;
+      } finally {
+        select.disabled = false;
+        buttons.forEach((button) => { button.disabled = false; });
+      }
+    });
+  } catch (error) {
+    if (section.isConnected) status.textContent = `Could not load printings: ${error.message}. Reopen this card to retry.`;
+  }
 }
 
 function openProxyList() {

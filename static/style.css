@@ -609,6 +609,8 @@ kbd {
 }
 
 #printings { width: 100%; }
+.detail-printing label { display: block; margin-bottom: 6px; color: var(--dim); font-size: 12px; }
+.detail-printing select { width: 100%; min-width: 0; }
 #printings:disabled { opacity: 0.55; }
 #printings:focus, .deck-picker:focus, .mini-input:focus { border-color: var(--line-2); }
 
