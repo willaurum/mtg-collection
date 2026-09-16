@@ -229,6 +229,7 @@ async function getJson(url, options) {
 async function loadIdentity() {
   try {
     const me = await getJson("/api/me");
+    configureAccountSettings(me);
     const shared = me.user && me.user !== "local";
     ui.whoami.hidden = !shared;
     ui.openFolderBtn.hidden = Boolean(shared);   // the folder is on the server
@@ -674,6 +675,7 @@ function collectionSearchText(entry) {
 }
 
 function renderCollection() {
+  persistCollectionFilters();
   hideCardPreview();
   const allEntries = state.library.entries || [];
   const terms = ui.collectionFilter.value.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
@@ -784,6 +786,7 @@ async function exportProfile() {
       const result = await desktopApi.save_profile(contents, filename);
       if (result.cancelled) return setStatus("Profile export cancelled.");
       if (!result.ok) throw new Error(result.error || "Could not save that profile.");
+      recordBackup();
       return setStatus(`Profile saved to ${result.path}`);
     }
     const blob = new Blob([JSON.stringify(profile, null, 2)], { type: "application/json" });
@@ -793,6 +796,7 @@ async function exportProfile() {
     link.download = filename;
     document.body.appendChild(link);
     link.click();
+    recordBackup();
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     setStatus("Profile exported — keep the file somewhere safe.");
@@ -1620,6 +1624,9 @@ const NAV = {
 };
 
 function showView(panel, navKey) {
+  state.navigationRevision = (state.navigationRevision || 0) + 1;
+  savePreference("mtg.last-view", JSON.stringify({ view: navKey, deckId: state.deckId }));
+  if (navKey !== "settings") el("passwordForm").reset();
   disarmDelete();
   hideCardPreview();
   [ui.cardPanel, ui.collectionPanel, ui.deckMenuPanel, ui.deckPanel, ui.importPanel, ui.settingsPanel]
@@ -1629,6 +1636,7 @@ function showView(panel, navKey) {
 }
 
 function showSettingsView() {
+  syncSettings();
   state.deckId = null;
   state.cardSeq++;
   showView(ui.settingsPanel, "settings");
@@ -2233,7 +2241,7 @@ ui.settingsBtn.addEventListener("click", showSettingsView);
 ui.refreshAllPricesBtn.addEventListener("click", refreshAllPrices);
 ui.logoutBtn.addEventListener("click", signOut);
 
+initializeSettings();
 loadIdentity();
 restoreRecent();
-showCollectionView();
-loadLibrary();
+startApp();

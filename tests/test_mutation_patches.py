@@ -213,6 +213,28 @@ class MutationPatchTests(unittest.TestCase):
         self.assertEqual(converted["summary"]["allocated"], 0)
         self.assertEqual(converted["entries"][0]["available"], 1)
 
+    def test_password_change_requires_current_password_and_validates_new_password(self):
+        url = "/api/account/password"
+        original = "a long test password"
+        result = self.client.post(url, json={"current_password": "wrong", "new_password": "replacement password"})
+        self.assertEqual(result.status_code, 400)
+        self.assertIsNotNone(auth.authenticate("test-user", original))
+        result = self.client.post(url, json={"current_password": original, "new_password": "short"})
+        self.assertEqual(result.status_code, 400)
+        self.post(url, {"current_password": original, "new_password": "replacement password"})
+        self.assertIsNone(auth.authenticate("test-user", original))
+        self.assertIsNotNone(auth.authenticate("test-user", "replacement password"))
+        with patch("server.LOCAL_USER", "test-user"):
+            self.assertEqual(self.client.post(url, json={}).status_code, 400)
+        with self.client.session_transaction() as session:
+            session.clear()
+        self.assertEqual(self.client.post(url, json={}).status_code, 401)
+        self.assertEqual(self.client.post("/api/cache/images/clear").status_code, 401)
+
+    def test_cache_clear_endpoint_reports_count(self):
+        with patch("scryfall.clear_image_cache", return_value=3):
+            self.assertEqual(self.post("/api/cache/images/clear", {}), {"removed": 3})
+
     def test_force_refresh_bypasses_daily_limit_and_updates_all_price_types(self):
         store.add_card(self.user_id, card("owned", "Owned Card", "1.00"), quantity=3)
         deck_id = store.create_deck(self.user_id, "Prices")

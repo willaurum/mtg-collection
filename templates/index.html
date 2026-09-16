@@ -113,6 +113,24 @@
     <section class="view" id="settingsPanel" hidden>
       <header class="view-head"><div><h1>Settings</h1><p class="sub">Manage your app and collection.</p></div></header>
       <div class="settings-body">
+        <p class="sub">Appearance and browsing preferences are saved on this device.</p>
+        <section class="settings-section">
+          <h2>Appearance</h2>
+          <label class="settings-row">Theme<select id="settingTheme"><option value="dark">Dark</option><option value="light">Light</option></select></label>
+          <label class="settings-row">Text size<select id="settingTextSize"><option value="small">Small</option><option value="normal">Normal</option><option value="large">Large</option></select></label>
+          <label class="settings-row">Compact layout<input type="checkbox" id="settingCompact"></label>
+        </section>
+        <section class="settings-section">
+          <h2>Startup</h2>
+          <label class="settings-row">Default screen<select id="settingStartup"><option value="collection">Collection</option><option value="decks">Decks</option><option value="last">Last visited</option></select></label>
+        </section>
+        <section class="settings-section">
+          <h2>Collection</h2>
+          <label class="settings-row">Default view<select id="settingCollectionView"><option value="grid">Grid</option><option value="list">List</option></select></label>
+          <label class="settings-row">Sort order<select id="settingCollectionSort"></select></label>
+          <label class="settings-row">Remember filters<input type="checkbox" id="settingRememberFilters"></label>
+          <p class="sub">Keep search text, colors, card type, rarity, and availability between visits.</p>
+        </section>
         <section class="settings-section" aria-labelledby="settingsPricesTitle">
           <h2 id="settingsPricesTitle">Prices</h2>
           <p class="sub">Prices are estimates in USD from Scryfall.</p>
@@ -126,6 +144,38 @@
             <p class="sub">Update collection and deck prices, plus cheapest-printing estimates, even if already refreshed today.</p>
           </div>
           <p class="sub" id="settingsPriceStatus" role="status" aria-live="polite"></p>
+        </section>
+        <section class="settings-section">
+          <h2>Data &amp; backups</h2>
+          <div class="settings-actions"><button class="btn" id="settingsExport">Export profile</button><button class="btn" id="settingsImport">Import profile</button></div>
+          <p class="sub">Back up your cards and decks as JSON. Import offers merge or replace options.</p>
+          <label class="settings-row">Backup reminders<select id="settingBackup"><option value="off">Off</option><option value="7">Weekly</option><option value="30">Monthly</option></select></label>
+          <p class="sub" id="backupStatus"></p>
+          <p class="sub">Reminders appear in the app while it is open. Browser exports still need to finish downloading.</p>
+          <div class="settings-actions"><button class="btn" id="settingsClearImages">Clear cached images</button></div>
+          <p class="sub">Clears downloaded images on the server, shared by all accounts. Cards and decks are kept; images download again when needed. Your browser may keep its own cached copies.</p>
+          <p class="sub" id="cacheStatus" role="status"></p>
+        </section>
+        <section class="settings-section">
+          <h2>Account</h2>
+          <p class="sub" id="settingsAccountName"></p>
+          <p class="sub" id="settingsLocalAccount" hidden>Local mode signs you in automatically. Password changes and sign out are available when connected to a server with account sign-in.</p>
+          <form id="passwordForm" class="settings-password">
+            <label>Current password<input id="currentPassword" type="password" autocomplete="current-password" required></label>
+            <label>New password<input id="newPassword" type="password" autocomplete="new-password" minlength="8" required></label>
+            <label>Confirm new password<input id="confirmPassword" type="password" autocomplete="new-password" minlength="8" required></label>
+            <p class="sub">Use at least 8 characters.</p>
+            <button class="btn" id="changePasswordBtn" type="submit">Change password</button>
+          </form>
+          <p class="sub" id="passwordStatus" role="status"></p>
+          <div class="settings-actions"><button class="btn" id="settingsSignOut">Sign out</button></div>
+        </section>
+        <section class="settings-section">
+          <h2>About &amp; help</h2>
+          <p class="sub">MTG Card Viewer · {{ app_version }}</p>
+          <h3>Keyboard shortcuts</h3>
+          <dl class="settings-shortcuts"><dt>Ctrl+K / ⌘K</dt><dd>Open commands</dd><dt>Ctrl+L</dt><dd>Focus card search</dd><dt>/</dt><dd>Search collection</dd><dt>G / L</dt><dd>Grid / list in Collection</dd><dt>↑ / ↓, Enter</dt><dd>Choose a search suggestion</dd><dt>Esc</dt><dd>Dismiss suggestions or supported dialogs</dd></dl>
+          <p class="sub">Card data, prices, and images provided by <a href="https://scryfall.com" target="_blank" rel="noopener noreferrer">Scryfall</a>. Magic: The Gathering is owned by Wizards of the Coast. This app is not affiliated with Scryfall or Wizards of the Coast.</p>
         </section>
       </div>
     </section>
@@ -484,6 +534,8 @@
   </section>
 </div>
 
+<aside id="backupReminder" class="backup-reminder" role="status" hidden><p>Time to back up your collection.</p><button class="btn" id="backupNow">Export profile</button><button class="btn quiet" id="backupDismiss">Remind me tomorrow</button></aside>
+<script src="/static/settings.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

@@ -1,6 +1,8 @@
 """Pricing checks without external API calls."""
 
 import unittest
+import tempfile
+from pathlib import Path
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -40,6 +42,23 @@ class CheapestPrintingTests(unittest.TestCase):
                 scryfall.cheapest_printing_usd({"name": "Retry"})
             self.assertEqual(scryfall.cheapest_printing_usd({"name": "Retry"}), Decimal("0.10"))
             self.assertEqual(get.call_count, 2)
+
+    def test_image_clear_only_removes_generated_completed_images(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            cached = root / ("a" * 40 + ".jpg")
+            cached.write_bytes(b"image")
+            for name in ("library.db", "notes.png", "b" * 40 + ".png.part"):
+                (root / name).write_bytes(b"keep")
+            (root / ("c" * 40 + ".jpg")).mkdir()
+            with patch("scryfall.CACHE_DIR", directory):
+                self.assertEqual(scryfall.clear_image_cache(), 1)
+                self.assertEqual(scryfall.clear_image_cache(), 0)
+            self.assertFalse(cached.exists())
+            self.assertTrue((root / "library.db").exists())
+            self.assertTrue((root / "notes.png").exists())
+            self.assertTrue((root / ("b" * 40 + ".png.part")).exists())
+            self.assertTrue((root / ("c" * 40 + ".jpg")).is_dir())
 
 
 if __name__ == "__main__":

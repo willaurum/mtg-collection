@@ -68,6 +68,23 @@ That produces `dist\MTGCardViewer.exe`. The spec bundles `templates/` and
 Misspell a card badly and the toast suggests real names instead of just
 failing.
 
+## Settings
+
+Open **Settings** in the rail to choose light/dark theme, text size, compact
+spacing, startup screen, collection layout/sort, and remembered filters.
+These preferences are saved on the current browser or desktop device.
+
+The Prices section shows collection value and can force a refresh of all
+collection, deck, and cheapest-printing prices. Data & backups provides profile
+import/export, optional weekly/monthly in-app backup reminders, and image-cache
+clearing. Cache clearing affects the server's shared downloaded images only.
+Browser caches may retain their own copies.
+
+Account password changes require the current password. Automatic local sign-in
+mode does not offer password changes or sign-out. About & help lists shortcuts
+and the app version; set `MTG_APP_VERSION` for a release label (otherwise it shows
+“Development build”).
+
 ## Where the data lives
 
 Everything is in one SQLite database — `library.db` — inside the data

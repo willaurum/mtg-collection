@@ -29,6 +29,7 @@ import store
 
 # PyInstaller unpacks the bundle to a temp dir; templates and static live there.
 BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+APP_VERSION = os.environ.get("MTG_APP_VERSION", "Development build")
 
 app = Flask(
     __name__,
@@ -63,7 +64,7 @@ def _no_store(response):
 @app.route("/")
 @auth.login_required
 def index():
-    return render_template("index.html", username=auth.current_user()["username"])
+    return render_template("index.html", username=auth.current_user()["username"], app_version=APP_VERSION)
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -113,7 +114,41 @@ def logout():
 def api_me():
     user = auth.current_user()
     return jsonify({"user": user["username"] if user else None,
-                    "auth": user is not None})
+                    "auth": user is not None, "local": bool(LOCAL_USER)})
+
+
+@app.post("/api/account/password")
+@auth.api_login_required
+def api_change_password():
+    if LOCAL_USER:
+        return jsonify(error="Password changes are unavailable in automatic local sign-in mode."), 400
+    user = auth.current_user()
+    if auth.locked_out(user["username"]):
+        return jsonify(error="Too many attempts. Please try again in a few minutes."), 429
+    payload = request.get_json(silent=True) or {}
+    current = payload.get("current_password")
+    password = payload.get("new_password")
+    if not isinstance(current, str) or not isinstance(password, str):
+        return jsonify(error="Enter your current and new passwords."), 400
+    if not auth.authenticate(user["username"], current):
+        auth.note_failure(user["username"])
+        return jsonify(error="Current password is incorrect."), 400
+    try:
+        auth.set_password(user["username"], password)
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+    auth.clear_failures(user["username"])
+    auth.log_in(user)
+    return jsonify(ok=True)
+
+
+@app.post("/api/cache/images/clear")
+@auth.api_login_required
+def api_clear_images():
+    try:
+        return jsonify(removed=scryfall.clear_image_cache())
+    except OSError:
+        return jsonify(error="Could not clear all cached images. Please try again."), 500
 
 
 def _card_response(fetch):

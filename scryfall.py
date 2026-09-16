@@ -12,6 +12,7 @@ import functools
 from decimal import Decimal, InvalidOperation
 import json
 import os
+import re
 import sys
 import tempfile
 import threading
@@ -226,6 +227,23 @@ def _cheapest_printing_usd(identity, day):
     return cheapest
 
 
+def clear_image_cache():
+    """Delete only completed, generated cache files, never directories or links."""
+    removed = 0
+    if not os.path.isdir(CACHE_DIR):
+        return removed
+    with os.scandir(CACHE_DIR) as entries:
+        for entry in entries:
+            if (re.fullmatch(r"[0-9a-f]{40}\.(?:jpg|png)", entry.name)
+                    and entry.is_file(follow_symlinks=False)):
+                try:
+                    os.unlink(entry.path)
+                    removed += 1
+                except FileNotFoundError:
+                    pass
+    return removed
+
+
 def image_bytes(url):
     """Fetch a card image, caching it on disk so re-viewing a card is instant."""
     if not url.startswith(IMAGE_PREFIX):
@@ -234,8 +252,11 @@ def image_bytes(url):
     suffix = ".png" if ".png" in url else ".jpg"
     path = os.path.join(CACHE_DIR, hashlib.sha1(url.encode()).hexdigest() + suffix)
     if os.path.exists(path):
-        with open(path, "rb") as fh:
-            return fh.read()
+        try:
+            with open(path, "rb") as fh:
+                return fh.read()
+        except FileNotFoundError:
+            pass  # Settings may clear the cache between the check and read.
     try:
         with _open(url, "image/*") as resp:
             data = resp.read()
