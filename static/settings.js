@@ -5,7 +5,8 @@ function jsonPreference(key, fallback) {
 }
 
 function applyAppearance() {
-  document.documentElement.dataset.theme = readPreference("mtg.theme", "dark") === "light" ? "light" : "dark";
+  const theme = readPreference("mtg.theme", "dark");
+  document.documentElement.dataset.theme = ["dark", "light", "eli"].includes(theme) ? theme : "dark";
   const scales = { small: "0.9", normal: "1", large: "1.2" };
   document.documentElement.style.setProperty("--text-scale", scales[readPreference("mtg.text-size", "normal")] || "1");
   document.documentElement.classList.toggle("compact", readPreference("mtg.compact", "0") === "1");
