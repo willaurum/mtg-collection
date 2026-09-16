@@ -1,0 +1,1 @@
+1. Add a way to change printings in the card popup in the deck builder. Changing the printing there changes it in your collection too.
