@@ -40,6 +40,7 @@
     <circle cx="10.25" cy="10.25" r=".95" fill="currentColor" stroke="none"/>
   </symbol>
   <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3.5v9M3.5 8h9"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 16 16"><path d="M8 14S1.5 10.2 1.5 5.7A3.6 3.6 0 0 1 8 3.5a3.6 3.6 0 0 1 6.5 2.2C14.5 10.2 8 14 8 14Z"/></symbol>
   <symbol id="i-folder" viewBox="0 0 16 16">
     <path d="M1.5 12.5v-9h4l1.5 2h7.5v7z"/>
   </symbol>
@@ -81,6 +82,10 @@
     <button class="nav" id="deckMenuBtn" data-view="decks">
       <svg class="ico"><use href="#i-decks"/></svg><span>Decks</span>
     </button>
+    <button class="nav" id="wishlistBtn" data-view="wishlist">
+      <svg class="ico"><use href="#i-heart"/></svg><span>Wishlist</span>
+      <em class="count" id="wishlistCount">0</em>
+    </button>
     <button class="nav" id="navCard" data-view="card">
       <svg class="ico"><use href="#i-card"/></svg><span>Card</span>
     </button>
@@ -105,7 +110,7 @@
       <button class="link-btn" id="openFolderBtn">
         <svg class="ico"><use href="#i-folder"/></svg>Collection folder
       </button>
-      <p class="credit">Card data &amp; images from Scryfall</p>
+      <p class="credit">Card data &amp; images from <a href="https://scryfall.com" target="_blank" rel="noopener noreferrer">Scryfall</a></p>
     </div>
   </nav>
 
@@ -214,6 +219,7 @@
           <footer class="card-actions">
             <button class="btn primary" id="addBtn">Add to collection</button>
             <button class="btn" id="removeBtn" hidden>Remove one</button>
+            <button class="btn" id="wishlistAddBtn">Add to wishlist</button>
             <button class="btn quiet" id="scryfallBtn" disabled>
               <svg class="ico"><use href="#i-link"/></svg>Scryfall
             </button>
@@ -225,6 +231,17 @@
           </footer>
           <p class="owned" id="ownedLabel"></p>
         </div>
+      </div>
+    </section>
+
+    <!-- --------------------------------------------------- wishlist -->
+    <section class="view" id="wishlistPanel" hidden>
+      <header class="view-head">
+        <div><h1>Wishlist</h1><p class="sub" id="wishlistSummary">Manual wishes and proxies needed by your decks.</p></div>
+      </header>
+      <div class="view-body">
+        <div class="coll-grid" id="wishlistGrid"></div>
+        <p class="empty" id="wishlistEmpty" hidden>No cards needed yet. Add one from the card viewer or add a proxy to a deck.</p>
       </div>
     </section>
 

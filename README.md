@@ -60,6 +60,7 @@ That produces `dist\MTGCardViewer.exe`. The spec bundles `templates/` and
 | Back up or move your library | **Export profile** writes your cards and decks to a JSON file; **Import profile** can merge one in or replace your current library with it |
 | Remove a copy | **Remove one** on the card, or the **−** badge on a collection tile |
 | Build a deck | **+** beside *Decks* in the rail — cards land in columns by type |
+| Track cards to acquire | **Wishlist** in the rail — manual wishes and main-deck proxies are merged without double-counting |
 | Revisit a card | Click it under **Recent** in the rail — the list survives restarts |
 | Open the card page | **Scryfall** button — opens your real browser, not the app window |
 | Focus the search box | **Ctrl+L** |

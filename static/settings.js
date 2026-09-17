@@ -157,6 +157,7 @@ async function startApp() {
   if (state.navigationRevision !== revision) return; // Respect navigation during loading.
   const target = startup === "last" ? last : { view: startup };
   if (target.view === "decks") showDeckMenuView();
+  else if (target.view === "wishlist") showWishlistView();
   else if (target.view === "deck" && deckById(target.deckId)) openDeck(target.deckId);
   else if (target.view === "settings") showSettingsView();
   else if (target.view === "import") showImportView();

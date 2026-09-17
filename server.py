@@ -336,6 +336,30 @@ def api_collection_remove():
                        if entry else {"removed_entry_ids": [card_id], "entry_id": card_id}))
 
 
+@app.post("/api/wishlist/add")
+@auth.api_login_required
+def api_wishlist_add():
+    payload = request.get_json(silent=True) or {}
+    card = payload.get("card") or {}
+    if not card.get("id"):
+        return jsonify({"error": "No card to add."}), 400
+    return _store_call(
+        lambda: store.wishlist_add(auth.user_id(), card, int(payload.get("quantity", 1))),
+        lambda _card_id: {})
+
+
+@app.post("/api/wishlist/remove")
+@auth.api_login_required
+def api_wishlist_remove():
+    payload = request.get_json(silent=True) or {}
+    card_id = payload.get("id")
+    if not card_id:
+        return jsonify({"error": "No card to remove."}), 400
+    return _store_call(
+        lambda: store.wishlist_remove(auth.user_id(), card_id, bool(payload.get("all"))),
+        lambda _card_id: {})
+
+
 @app.get("/api/decks/<deck_id>/unowned-price")
 @auth.api_login_required
 def api_deck_unowned_price(deck_id):

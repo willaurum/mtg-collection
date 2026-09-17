@@ -37,8 +37,11 @@ const ui = {
   rules: el("rules"), rarityDot: el("rarityDot"), setLine: el("setLine"),
   artist: el("artistLine"), priceChips: el("priceChips"), legalChips: el("legalChips"),
   printings: el("printings"), scryfallBtn: el("scryfallBtn"),
-  addBtn: el("addBtn"), removeBtn: el("removeBtn"), ownedLabel: el("ownedLabel"),
+  addBtn: el("addBtn"), removeBtn: el("removeBtn"), wishlistAddBtn: el("wishlistAddBtn"), ownedLabel: el("ownedLabel"),
   viewCollectionBtn: el("viewCollectionBtn"), collCount: el("collCount"),
+  wishlistBtn: el("wishlistBtn"), wishlistCount: el("wishlistCount"),
+  wishlistPanel: el("wishlistPanel"), wishlistGrid: el("wishlistGrid"),
+  wishlistEmpty: el("wishlistEmpty"), wishlistSummary: el("wishlistSummary"),
   openFolderBtn: el("openFolderBtn"),
   cardPanel: el("cardPanel"), collectionPanel: el("collectionPanel"),
   collGrid: el("collGrid"), collEmpty: el("collEmpty"), collSummary: el("collSummary"),
@@ -114,7 +117,7 @@ const state = {
   suggestSeq: 0,
   cardSeq: 0,
   loadSeq: 0,          // owns the top-bar loading indicator
-  library: { entries: [], decks: [], summary: {} },  // loaded once, then patched
+  library: { entries: [], decks: [], wishlist: [], summary: {} },  // loaded once, then patched
   entryById: new Map(),
   deckId: null,        // deck currently open in the builder
   deleteTimer: null,
@@ -456,12 +459,14 @@ function renderRecent() {
 
 /** Apply the complete snapshot returned when the application first loads. */
 function applyLibrary(data) {
+  data.wishlist = data.wishlist || [];
   state.library = data;
   state.entryById = new Map(data.entries.map((e) => [e.id, e]));
   applySummary(data.summary);
   renderDeckList();
   renderOwned();
   if (!ui.collectionPanel.hidden) renderCollection();
+  if (!ui.wishlistPanel.hidden) renderWishlist();
   if (!ui.deckPanel.hidden) renderDeckPanel();
 }
 
@@ -541,11 +546,13 @@ function applyPatch(data) {
     (a.name || "").localeCompare(b.name || ""));
 
   state.library.summary = data.summary;
+  if (data.wishlist) state.library.wishlist = data.wishlist;
   state.entryById = new Map(state.library.entries.map((entry) => [entry.id, entry]));
   applySummary(data.summary);
   renderDeckList();
   renderOwned();
   if (!ui.collectionPanel.hidden) renderCollection();
+  if (!ui.wishlistPanel.hidden) renderWishlist();
   if (!ui.deckMenuPanel.hidden) renderDeckList();
   if (!ui.deckPanel.hidden) renderDeckPanel();
 }
@@ -577,6 +584,7 @@ async function mutate(url, body, success) {
 function applySummary(summary) {
   ui.settingsCollectionValue.textContent = money(summary.value);
   ui.collCount.textContent = summary.total;
+  ui.wishlistCount.textContent = (state.library.wishlist || []).length;
   // The folder lives one click away in the rail; it is noise in the heading.
   const parts = [`${summary.total} card${summary.total === 1 ? "" : "s"}`,
                  `${summary.distinct} unique`];
@@ -594,6 +602,9 @@ function renderOwned() {
   const decks = (state.library.decks || []);
 
   ui.addBtn.disabled = !state.card;
+  ui.wishlistAddBtn.disabled = !state.card;
+  const wished = state.card && (state.library.wishlist || []).find((item) => item.id === state.card.id);
+  ui.wishlistAddBtn.textContent = wished?.manual_quantity ? "Wish for another" : "Add to wishlist";
   ui.addBtn.textContent = held ? "Add another" : "Add to collection";
   ui.removeBtn.hidden = held === 0;
 
@@ -627,6 +638,14 @@ const removeFromCollection = (cardId) => mutate(
   "/api/collection/remove", { id: cardId },
   (d) => (d.entry ? `Removed one copy — ${d.entry.quantity} left.`
                   : "Removed from the collection."));
+
+const addToWishlist = () => state.card && mutate(
+  "/api/wishlist/add", { card: state.card },
+  () => `Added ${state.card.name} to your wishlist.`);
+
+const removeFromWishlist = (cardId) => mutate(
+  "/api/wishlist/remove", { id: cardId },
+  () => "Removed one manual wish. Deck proxy needs are unchanged.");
 
 function addCurrentToDeck(deckId) {
   if (!state.card || !deckId) return;
@@ -729,6 +748,34 @@ function renderCollection() {
       ${locationChips(entry)}
     </figure>`).join("");
   wireTiles(ui.collGrid, (id) => openCardById(id));
+}
+
+function renderWishlist() {
+  hideCardPreview();
+  const items = state.library.wishlist || [];
+  ui.wishlistCount.textContent = items.length;
+  const total = items.reduce((sum, item) => sum + item.quantity, 0);
+  ui.wishlistSummary.textContent = `${total} card${total === 1 ? "" : "s"} across ${items.length} printing${items.length === 1 ? "" : "s"}. Manual wishes and deck proxies are merged without double-counting.`;
+  ui.wishlistEmpty.hidden = items.length > 0;
+  ui.wishlistGrid.innerHTML = items.map((item) => {
+    const sources = [];
+    if (item.manual_quantity) sources.push(`<span class="loc free">Wish ×${item.manual_quantity}</span>`);
+    item.proxy_decks.forEach((deck) => sources.push(
+      `<span class="loc deck" data-deck="${escapeHtml(deck.deck_id)}">${escapeHtml(deck.deck_name)} ×${deck.quantity}</span>`));
+    const remove = item.manual_quantity
+      ? `<button class="drop wishlist-remove" data-wish-drop="${escapeHtml(item.id)}" title="Remove one manual wish">−</button>` : "";
+    return `<figure class="coll-card" data-id="${escapeHtml(item.id)}" tabindex="0">
+      ${thumbHtml(item, `×${item.quantity}`, remove)}
+      <div class="wishlist-sources">${sources.join("")}</div>
+    </figure>`;
+  }).join("");
+  wireTiles(ui.wishlistGrid, (id) => openCardById(id));
+  ui.wishlistGrid.querySelectorAll("[data-wish-drop]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      removeFromWishlist(button.dataset.wishDrop);
+    });
+  });
 }
 
 function cardValue(entry) {
@@ -1170,7 +1217,7 @@ function wireTiles(root, onOpen) {
   root.querySelectorAll(".coll-card").forEach((node) => {
     node.addEventListener("click", (event) => {
       const target = event.target;
-      if (target.dataset.drop || target.dataset.deck || target.dataset.step) return;
+      if (target.dataset.drop || target.dataset.wishDrop || target.dataset.deck || target.dataset.step) return;
       onOpen(node.dataset.id);
     });
     node.addEventListener("mouseenter", () => showCardPreview(node.dataset.id, node));
@@ -1186,7 +1233,7 @@ function wireTiles(root, onOpen) {
       }
     });
   });
-  root.querySelectorAll(".drop").forEach((node) => {
+  root.querySelectorAll("[data-drop]").forEach((node) => {
     node.addEventListener("click", (event) => {
       event.stopPropagation();
       removeFromCollection(node.dataset.drop);
@@ -1671,6 +1718,7 @@ const NAV = {
   settings: () => ui.settingsBtn,
   card: () => ui.navCard,
   collection: () => ui.viewCollectionBtn,
+  wishlist: () => ui.wishlistBtn,
   import: () => ui.importBtn,
   decks: () => ui.deckMenuBtn,
 };
@@ -1681,7 +1729,7 @@ function showView(panel, navKey) {
   if (navKey !== "settings") el("passwordForm").reset();
   disarmDelete();
   hideCardPreview();
-  [ui.cardPanel, ui.collectionPanel, ui.deckMenuPanel, ui.deckPanel, ui.importPanel, ui.settingsPanel]
+  [ui.cardPanel, ui.collectionPanel, ui.wishlistPanel, ui.deckMenuPanel, ui.deckPanel, ui.importPanel, ui.settingsPanel]
     .forEach((node) => { node.hidden = node !== panel; });
   Object.entries(NAV).forEach(([key, node]) =>
     node().classList.toggle("active", key === navKey));
@@ -1701,6 +1749,13 @@ function showCollectionView() {
   showView(ui.collectionPanel, "collection");
   renderDeckList();
   renderCollection();
+}
+
+function showWishlistView() {
+  state.deckId = null;
+  state.cardSeq++;
+  showView(ui.wishlistPanel, "wishlist");
+  renderWishlist();
 }
 
 function showCardView() {
@@ -2160,8 +2215,10 @@ document.addEventListener("keydown", (event) => {
 });
 
 ui.addBtn.addEventListener("click", addToCollection);
+ui.wishlistAddBtn.addEventListener("click", addToWishlist);
 ui.removeBtn.addEventListener("click", () => state.card && removeFromCollection(state.card.id));
 ui.viewCollectionBtn.addEventListener("click", showCollectionView);
+ui.wishlistBtn.addEventListener("click", showWishlistView);
 ui.openFolderBtn.addEventListener("click", openFolder);
 ui.collectionFilter.addEventListener("input", renderCollection);
 ui.collectionSort.addEventListener("change", setCollectionSort);

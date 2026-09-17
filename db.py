@@ -17,7 +17,7 @@ import sqlite3
 import sys
 import threading
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 SCHEMA = """
 CREATE TABLE users (
@@ -204,6 +204,17 @@ def migrate(conn=None):
                )"""
         )
         current = 5
+    if current < 6:
+        conn.execute(
+            """CREATE TABLE wishlist (
+                 user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+                 card_id TEXT NOT NULL REFERENCES cards (id),
+                 quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+                 added TEXT NOT NULL,
+                 PRIMARY KEY (user_id, card_id)
+               )"""
+        )
+        current = 6
     # Later versions add their steps here, guarded by `current < N`.
     conn.execute(
         "INSERT INTO meta (key, value) VALUES ('schema_version', ?) "

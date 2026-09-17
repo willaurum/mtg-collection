@@ -250,6 +250,36 @@ class MutationPatchTests(unittest.TestCase):
         self.assertEqual(moved["summary"]["allocated"], 1)
         self.assertEqual(moved["entries"][0]["available"], 0)
 
+    def test_wishlist_merges_manual_wishes_and_main_deck_proxies(self):
+        wanted = card("wanted", "Wanted Card")
+        store.wishlist_add(self.user_id, wanted, 2)
+        deck_id = store.create_deck(self.user_id, "Proxy deck")
+        store.deck_add(self.user_id, deck_id, card=wanted, quantity=3)
+        store.deck_add(self.user_id, deck_id, card=card("maybe", "Maybe"), zone="maybeboard")
+
+        wishes = store.library(self.user_id)["wishlist"]
+        self.assertEqual(len(wishes), 1)
+        self.assertEqual(wishes[0]["manual_quantity"], 2)
+        self.assertEqual(wishes[0]["proxy_quantity"], 3)
+        self.assertEqual(wishes[0]["quantity"], 3)
+        self.assertEqual(wishes[0]["proxy_decks"][0]["deck_name"], "Proxy deck")
+
+        store.wishlist_remove(self.user_id, "wanted", drop_all=True)
+        proxy_only = store.library(self.user_id)["wishlist"][0]
+        self.assertEqual(proxy_only["manual_quantity"], 0)
+        self.assertEqual(proxy_only["quantity"], 3)
+
+    def test_wishlist_is_user_scoped_and_round_trips_in_profiles(self):
+        store.wishlist_add(self.user_id, card("wish", "Wish"), 2)
+        other_user = auth.create_user("wishlist-user", "a long test password")
+        self.assertEqual(store.wishlist(other_user), [])
+
+        profile = store.export_profile(self.user_id)
+        store.import_profile(other_user, profile)
+        copied = store.wishlist(other_user)
+        self.assertEqual(copied[0]["id"], "wish")
+        self.assertEqual(copied[0]["manual_quantity"], 2)
+
     def test_lookup_add_uses_proxy_when_no_owned_copy_is_free(self):
         self.post("/api/collection/add", {"card": card("bolt", "Lightning Bolt")})
         first_deck = self.post("/api/decks/create", {"name": "First deck"})["deck_id"]

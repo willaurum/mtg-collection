@@ -22,7 +22,7 @@ import db
 MAX_NAME = 60
 DEFAULT_DECK_NAME = "New deck"
 PROFILE_FORMAT = "mtg-card-viewer-profile"
-PROFILE_VERSION = 2
+PROFILE_VERSION = 3
 
 
 class StoreError(Exception):
@@ -173,6 +173,85 @@ def entries(user_id, conn=None):
         (user_id,),
     ).fetchall()
     return [_entry_from_row(row) for row in rows]
+
+
+# ------------------------------------------------------------- wishlist
+
+def wishlist_add(user_id, card, quantity=1):
+    """Add a manual wish while keeping deck-proxy needs independent."""
+    quantity = max(1, int(quantity))
+    with db.transaction() as conn:
+        card_id = remember_card(card, conn)
+        conn.execute(
+            """INSERT INTO wishlist (user_id, card_id, quantity, added)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT (user_id, card_id)
+               DO UPDATE SET quantity = quantity + excluded.quantity""",
+            (user_id, card_id, quantity, _now()),
+        )
+    return card_id
+
+
+def wishlist_remove(user_id, card_id, drop_all=False):
+    """Remove only the manual wish; proxy-derived needs remain visible."""
+    with db.transaction() as conn:
+        row = conn.execute(
+            "SELECT quantity FROM wishlist WHERE user_id = ? AND card_id = ?",
+            (user_id, card_id),
+        ).fetchone()
+        if not row:
+            return card_id
+        remaining = 0 if drop_all else int(row["quantity"]) - 1
+        if remaining > 0:
+            conn.execute(
+                "UPDATE wishlist SET quantity = ? WHERE user_id = ? AND card_id = ?",
+                (remaining, user_id, card_id),
+            )
+        else:
+            conn.execute("DELETE FROM wishlist WHERE user_id = ? AND card_id = ?",
+                         (user_id, card_id))
+    return card_id
+
+
+def wishlist(user_id, conn=None):
+    """Merge manual wishes and proxy requirements without double-counting overlap."""
+    conn = conn or db.connect()
+    rows = conn.execute(
+        """SELECT k.id AS card_id, k.data, w.quantity AS manual_quantity, w.added,
+                  COALESCE(SUM(CASE WHEN d.id IS NOT NULL AND dc.proxy = 1 AND dc.zone = 'main'
+                                    THEN dc.quantity ELSE 0 END), 0) AS proxy_quantity
+             FROM cards k
+             LEFT JOIN wishlist w ON w.card_id = k.id AND w.user_id = ?
+             LEFT JOIN deck_cards dc ON dc.card_id = k.id AND dc.proxy = 1 AND dc.zone = 'main'
+             LEFT JOIN decks d ON d.id = dc.deck_id AND d.user_id = ?
+            WHERE w.card_id IS NOT NULL OR d.id IS NOT NULL
+            GROUP BY k.id, k.data, w.quantity, w.added
+            ORDER BY k.name COLLATE NOCASE""",
+        (user_id, user_id),
+    ).fetchall()
+    result = []
+    for row in rows:
+        manual = int(row["manual_quantity"] or 0)
+        proxy = int(row["proxy_quantity"] or 0)
+        if not manual and not proxy:
+            continue
+        card = card_json(row)
+        deck_rows = conn.execute(
+            """SELECT d.id, d.name, dc.quantity FROM deck_cards dc
+                 JOIN decks d ON d.id = dc.deck_id
+                WHERE d.user_id = ? AND dc.card_id = ? AND dc.proxy = 1
+                  AND dc.zone = 'main' ORDER BY d.name COLLATE NOCASE""",
+            (user_id, row["card_id"]),
+        ).fetchall()
+        result.append({
+            "id": row["card_id"], "name": card.get("name"), "card": card,
+            "set": card.get("set"), "collector_number": card.get("collector_number"),
+            "manual_quantity": manual, "proxy_quantity": proxy,
+            "quantity": max(manual, proxy), "added": row["added"],
+            "proxy_decks": [{"deck_id": item["id"], "deck_name": item["name"],
+                             "quantity": int(item["quantity"])} for item in deck_rows],
+        })
+    return result
 
 
 # ----------------------------------------------------------------- decks
@@ -717,7 +796,8 @@ def patch(user_id, entry_ids=(), deck_ids=()):
     decks = [deck for deck_id in dict.fromkeys(deck_ids)
              if (deck := deck_state(user_id, deck_id, conn)) is not None]
     record_price_snapshot(user_id, conn)
-    return {"entries": entries, "decks": decks, "summary": summary(user_id, conn)}
+    return {"entries": entries, "decks": decks, "wishlist": wishlist(user_id, conn),
+            "summary": summary(user_id, conn)}
 
 def library(user_id):
     """One consistent snapshot: collection, decks, and who holds what."""
@@ -739,7 +819,8 @@ def library(user_id):
     for row in deck_rows:
         decks.append(deck_state(user_id, row["id"], conn))
 
-    return {"entries": owned, "decks": decks, "summary": summary(user_id, conn)}
+    return {"entries": owned, "decks": decks, "wishlist": wishlist(user_id, conn),
+            "summary": summary(user_id, conn)}
 
 
 # ---------------------------------------------------------- profile backup
@@ -754,6 +835,10 @@ def export_profile(user_id):
         "collection": [
             {"card": entry["card"], "quantity": entry["quantity"]}
             for entry in snapshot["entries"]
+        ],
+        "wishlist": [
+            {"card": item["card"], "quantity": item["manual_quantity"]}
+            for item in snapshot["wishlist"] if item["manual_quantity"]
         ],
         "decks": [
             {
@@ -786,13 +871,14 @@ def import_profile(user_id, profile, mode="merge"):
     """
     if not isinstance(profile, dict):
         raise StoreError("That file is not a profile backup.")
-    if profile.get("format") != PROFILE_FORMAT or profile.get("version") not in (1, PROFILE_VERSION):
+    if profile.get("format") != PROFILE_FORMAT or profile.get("version") not in (1, 2, PROFILE_VERSION):
         raise StoreError("That profile is from an unsupported version of MTG Card Viewer.")
     if mode not in ("merge", "replace"):
         raise StoreError("Choose whether to add to or replace your collection.")
     collection = profile.get("collection")
     decks = profile.get("decks")
-    if not isinstance(collection, list) or not isinstance(decks, list):
+    wishes = profile.get("wishlist", [])
+    if not isinstance(collection, list) or not isinstance(decks, list) or not isinstance(wishes, list):
         raise StoreError("That profile backup is incomplete.")
 
     report = {
@@ -803,6 +889,7 @@ def import_profile(user_id, profile, mode="merge"):
         if mode == "replace":
             conn.execute("DELETE FROM decks WHERE user_id = ?", (user_id,))
             conn.execute("DELETE FROM collection WHERE user_id = ?", (user_id,))
+            conn.execute("DELETE FROM wishlist WHERE user_id = ?", (user_id,))
         for item in collection:
             card = item.get("card") if isinstance(item, dict) else None
             quantity = _profile_quantity(item.get("quantity")) if isinstance(item, dict) else 0
@@ -819,6 +906,21 @@ def import_profile(user_id, profile, mode="merge"):
             )
             report["cards"] += quantity
             report["printings"] += 1
+
+        for item in wishes:
+            card = item.get("card") if isinstance(item, dict) else None
+            quantity = _profile_quantity(item.get("quantity")) if isinstance(item, dict) else 0
+            if not isinstance(card, dict) or not card.get("id") or not quantity:
+                report["skipped_cards"] += 1
+                continue
+            card_id = remember_card(card, conn)
+            conn.execute(
+                """INSERT INTO wishlist (user_id, card_id, quantity, added)
+                   VALUES (?, ?, ?, ?)
+                   ON CONFLICT (user_id, card_id)
+                   DO UPDATE SET quantity = quantity + excluded.quantity""",
+                (user_id, card_id, quantity, _now()),
+            )
 
         allocations = _allocations(conn, user_id)
         for source_deck in decks:

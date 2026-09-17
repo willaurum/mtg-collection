@@ -362,6 +362,7 @@ body.busy .progress { opacity: 1; }
 
 .rail-foot { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
 .credit { margin: 7px 8px 2px; font-size: calc(10.5px * var(--text-scale, 1)); line-height: 1.45; color: #55634f; }
+.credit a { color: inherit; }
 
 /* ------------------------------------------------------------- views */
 
@@ -737,6 +738,9 @@ kbd {
 }
 
 .coll-card { margin: 0; cursor: pointer; }
+.wishlist-sources { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.wishlist-sources .loc { cursor: default; }
+.wishlist-remove { position: absolute; z-index: 2; }
 
 .thumb {
   position: relative;
