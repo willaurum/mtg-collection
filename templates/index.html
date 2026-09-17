@@ -406,6 +406,7 @@
         </div>
         <div class="head-actions">
           <button class="btn quiet" id="deckExportBtn">Copy decklist</button>
+          <button class="btn" id="goldfishBtn">Draw opening hand</button>
           <button class="btn quiet" id="proxyListBtn" hidden>Proxies</button>
           <button class="btn quiet danger" id="deleteDeckBtn">Delete deck</button>
         </div>
@@ -497,6 +498,18 @@
     <textarea id="deckExportText" readonly spellcheck="false" aria-label="Decklist to copy"></textarea>
     <div class="import-actions"><button class="btn primary" id="deckCopyBtn">Copy to clipboard</button>
       <button class="btn quiet" id="deckExportCancelBtn">Close</button></div>
+  </section>
+</div>
+
+<div class="deck-export-overlay" id="goldfishDialog" hidden>
+  <section class="deck-export-dialog goldfish-dialog" role="dialog" aria-modal="true" aria-labelledby="goldfishTitle">
+    <button class="detail-close" id="goldfishCloseBtn" aria-label="Close opening hand">×</button>
+    <h2 id="goldfishTitle">Opening hand</h2>
+    <p class="sub">Main deck only, including proxies. Commander and maybeboard stay out. Each redraw starts with a fresh shuffle.</p>
+    <p class="sub" id="goldfishSummary" role="status" aria-live="polite"></p>
+    <div class="goldfish-hand" id="goldfishHand"></div>
+    <div class="import-actions"><button class="btn primary" id="goldfishRedrawBtn">Shuffle &amp; draw again</button>
+      <button class="btn quiet" id="goldfishDoneBtn">Close</button></div>
   </section>
 </div>
 

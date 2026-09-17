@@ -272,6 +272,13 @@ gutting your list. Deleting a deck hands its copies straight back.
 
 ### The deck view
 
+**Opening-hand practice.** Use **Draw opening hand** to draw up to seven random
+cards from the main deck. Copy counts are respected, proxies are included, and
+the designated commander and maybeboard are excluded. **Shuffle & draw again**
+starts a fresh hand without changing your saved deck or collection. Small decks
+draw all available cards. This is an opening-hand preview, not a gameplay or
+mulligan rules engine.
+
 Laid out like Archidekt: one column per card type, cards stacked so only each
 title bar shows, and hovering lifts a card clear of the ones below it. Columns
 flow into as many screen columns as the window fits and the page scrolls down —

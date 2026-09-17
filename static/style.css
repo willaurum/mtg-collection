@@ -743,6 +743,11 @@ kbd {
 .wishlist-remove { position: absolute; z-index: 2; }
 .detail-proxy-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; width: 100%; color: var(--dim); font-size: calc(12px * var(--text-scale, 1)); }
 .detail-proxy-picker select { flex: 1; min-width: 0; max-width: 100%; }
+.deck-export-dialog.goldfish-dialog { width: min(1150px, 100%); max-height: calc(100dvh - 44px); overflow-y: auto; }
+.goldfish-hand { display: grid; grid-template-columns: repeat(auto-fit, minmax(115px, 1fr)); gap: 12px; margin: 18px 0; }
+.goldfish-hand figure { margin: 0; }
+.goldfish-hand .thumb { display: grid; place-items: center; }
+.goldfish-hand figcaption { margin-top: 6px; font-size: calc(12px * var(--text-scale, 1)); }
 
 .thumb {
   position: relative;

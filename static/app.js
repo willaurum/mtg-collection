@@ -70,6 +70,9 @@ const ui = {
   deckCategory: el("deckCategory"), deckPrice: el("deckPrice"), deckExportBtn: el("deckExportBtn"),
   deckUnownedPrice: el("deckUnownedPrice"),
   deckExportDialog: el("deckExportDialog"), deckExportText: el("deckExportText"),
+  goldfishBtn: el("goldfishBtn"), goldfishDialog: el("goldfishDialog"),
+  goldfishHand: el("goldfishHand"), goldfishSummary: el("goldfishSummary"),
+  goldfishRedrawBtn: el("goldfishRedrawBtn"),
   deckExportCloseBtn: el("deckExportCloseBtn"), deckExportCancelBtn: el("deckExportCancelBtn"),
   deckCopyBtn: el("deckCopyBtn"),
   deckGrid: el("deckGrid"), deckEmpty: el("deckEmpty"), deckFilter: el("deckFilter"),
@@ -1803,6 +1806,61 @@ function setDeckCategory() {
     category ? `Moved to ${category}.` : "Moved to Uncategorized.");
 }
 
+// Sample physical copies without replacement; keep the saved deck untouched.
+function drawOpeningHand(deck, random = Math.random) {
+  const pool = deck.cards.filter((line) => line.zone === "main" && line.card_id !== deck.commander_id)
+    .map((line) => ({ line, remaining: Math.max(0, Math.floor(Number(line.quantity) || 0)) }));
+  const total = pool.reduce((sum, item) => sum + item.remaining, 0);
+  let remaining = total;
+  const hand = [];
+  while (hand.length < 7 && remaining > 0) {
+    let index = Math.floor(random() * remaining);
+    for (const item of pool) {
+      if (index < item.remaining) {
+        hand.push(item.line);
+        item.remaining--;
+        remaining--;
+        break;
+      }
+      index -= item.remaining;
+    }
+  }
+  return { hand, total };
+}
+
+function renderOpeningHand() {
+  const deck = deckById(state.deckId);
+  if (!deck) return closeGoldfish();
+  const { hand, total } = drawOpeningHand(deck);
+  ui.goldfishSummary.textContent = total
+    ? `${deck.name}: drew ${hand.length} of ${total} cards.${total < 7 ? " Fewer than seven eligible cards are in this deck." : ""}`
+    : "No cards to draw. Add cards to the main deck first.";
+  ui.goldfishRedrawBtn.disabled = total === 0;
+  ui.goldfishHand.innerHTML = hand.map((line) => {
+    const card = lineCard(line);
+    const name = lineName(line);
+    const art = imageUrl(card, 0);
+    return `<figure><div class="thumb">${art
+      ? `<img src="/img?u=${encodeURIComponent(art)}" alt="${escapeHtml(name)}">`
+      : `<span class="sub">No image available</span>`}</div>
+      <figcaption>${escapeHtml(name)}${line.proxy ? " · Proxy" : ""}</figcaption></figure>`;
+  }).join("");
+}
+
+function openGoldfish() {
+  if (!deckById(state.deckId)) return;
+  hideCardPreview();
+  ui.goldfishDialog.hidden = false;
+  renderOpeningHand();
+  el("goldfishCloseBtn").focus();
+}
+
+function closeGoldfish() {
+  ui.goldfishDialog.hidden = true;
+  ui.goldfishHand.innerHTML = "";
+  ui.goldfishBtn.focus();
+}
+
 function exportDeck() {
   const deck = deckById(state.deckId);
   if (!deck) return;
@@ -2213,6 +2271,16 @@ ui.printings.addEventListener("change", () => {
 });
 
 document.addEventListener("keydown", (event) => {
+  if (!ui.goldfishDialog.hidden) {
+    if (event.key === "Escape") { event.preventDefault(); closeGoldfish(); }
+    if (event.key === "Tab") {
+      const buttons = [...ui.goldfishDialog.querySelectorAll("button:not(:disabled)")];
+      const first = buttons[0], last = buttons[buttons.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }
+    return;
+  }
   if (!ui.deckExportDialog.hidden) {
     if (event.key === "Escape") { event.preventDefault(); ui.deckExportDialog.hidden = true; }
     return;
@@ -2355,6 +2423,13 @@ ui.deckImportDialog.querySelectorAll("[data-deck-import-mode]").forEach((button)
 });
 ui.deleteDeckBtn.addEventListener("click", deleteDeck);
 ui.deckExportBtn.addEventListener("click", exportDeck);
+ui.goldfishBtn.addEventListener("click", openGoldfish);
+ui.goldfishRedrawBtn.addEventListener("click", renderOpeningHand);
+el("goldfishCloseBtn").addEventListener("click", closeGoldfish);
+el("goldfishDoneBtn").addEventListener("click", closeGoldfish);
+ui.goldfishDialog.addEventListener("click", (event) => {
+  if (event.target === ui.goldfishDialog) closeGoldfish();
+});
 ui.deckCopyBtn.addEventListener("click", copyDeckExport);
 ui.deckExportCloseBtn.addEventListener("click", () => { ui.deckExportDialog.hidden = true; });
 ui.deckExportCancelBtn.addEventListener("click", () => { ui.deckExportDialog.hidden = true; });
