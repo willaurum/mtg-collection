@@ -238,6 +238,7 @@
     <section class="view" id="wishlistPanel" hidden>
       <header class="view-head">
         <div><h1>Wishlist</h1><p class="sub" id="wishlistSummary">Manual wishes and proxies needed by your decks.</p></div>
+        <div class="head-actions"><button class="btn" id="wishlistExportBtn">Export wishlist</button></div>
       </header>
       <div class="view-body">
         <div class="coll-grid" id="wishlistGrid"></div>
@@ -492,7 +493,7 @@
   <section class="deck-export-dialog" role="dialog" aria-modal="true" aria-labelledby="deckExportTitle">
     <button class="detail-close" id="deckExportCloseBtn" aria-label="Close">×</button>
     <h2 id="deckExportTitle">Copy decklist</h2>
-    <p class="sub">This is ready to paste into the app’s deck importer or another decklist tool.</p>
+    <p class="sub" id="deckExportDescription">This is ready to paste into the app’s deck importer or another decklist tool.</p>
     <textarea id="deckExportText" readonly spellcheck="false" aria-label="Decklist to copy"></textarea>
     <div class="import-actions"><button class="btn primary" id="deckCopyBtn">Copy to clipboard</button>
       <button class="btn quiet" id="deckExportCancelBtn">Close</button></div>

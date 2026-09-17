@@ -450,7 +450,8 @@ def api_deck_add():
     payload = request.get_json(silent=True) or {}
     return _store_call(lambda: store.deck_add(
         auth.user_id(), payload.get("deck_id"), payload.get("card_id"),
-        int(payload.get("quantity", 1)), payload.get("card"), payload.get("zone", "main")),
+        int(payload.get("quantity", 1)), payload.get("card"), payload.get("zone", "main"),
+        force_proxy=payload.get("force_proxy") is True),
         lambda result: {"entry_ids": [result["card_id"]],
                         "deck_ids": [result["deck_id"]], "deck_id": result["deck_id"],
                         "proxy_added": result["proxy_added"]})

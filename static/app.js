@@ -42,6 +42,7 @@ const ui = {
   wishlistBtn: el("wishlistBtn"), wishlistCount: el("wishlistCount"),
   wishlistPanel: el("wishlistPanel"), wishlistGrid: el("wishlistGrid"),
   wishlistEmpty: el("wishlistEmpty"), wishlistSummary: el("wishlistSummary"),
+  wishlistExportBtn: el("wishlistExportBtn"),
   openFolderBtn: el("openFolderBtn"),
   cardPanel: el("cardPanel"), collectionPanel: el("collectionPanel"),
   collGrid: el("collGrid"), collEmpty: el("collEmpty"), collSummary: el("collSummary"),
@@ -762,6 +763,7 @@ function renderWishlist() {
   hideCardPreview();
   const items = state.library.wishlist || [];
   ui.wishlistCount.textContent = items.length;
+  ui.wishlistExportBtn.disabled = items.length === 0;
   const total = items.reduce((sum, item) => sum + item.quantity, 0);
   ui.wishlistSummary.textContent = `${total} card${total === 1 ? "" : "s"} across ${items.length} printing${items.length === 1 ? "" : "s"}. Manual wishes and deck proxies are merged without double-counting.`;
   ui.wishlistEmpty.hidden = items.length > 0;
@@ -1112,7 +1114,30 @@ function openCollectionDetail(cardId) {
   detailBase(entry.card || {}, "Collection card",
     `${entry.quantity} owned · ${entry.available} free${locations ? ` · ${locations}` : ""}`);
   ui.detailActions.innerHTML = `<button class="btn primary" data-detail-add>Add another</button>
-    <button class="btn" data-detail-remove>Remove one</button>`;
+    <button class="btn" data-detail-remove>Remove one</button>
+    <label class="detail-proxy-picker">Proxy destination
+      <select class="view-select" data-proxy-deck aria-label="Deck for proxy">
+        ${(state.library.decks || []).map((deck) =>
+          `<option value="${escapeHtml(deck.id)}">${escapeHtml(deck.name)}</option>`).join("")}
+      </select>
+    </label>
+    <button class="btn" data-detail-add-proxy>Add proxy to deck</button>
+    <p class="sub">${state.library.decks.length
+      ? "Adds a proxy to the main deck. Your owned copies remain available."
+      : "Create a deck first to add a proxy."}</p>`;
+  const proxyButton = ui.detailActions.querySelector("[data-detail-add-proxy]");
+  const proxyDeck = ui.detailActions.querySelector("[data-proxy-deck]");
+  proxyButton.disabled = proxyDeck.disabled = !state.library.decks.length;
+  proxyButton.addEventListener("click", async () => {
+    const deckId = proxyDeck.value;
+    if (!deckId || proxyButton.disabled) return;
+    proxyButton.disabled = true;
+    const result = await mutate("/api/decks/add", {
+      deck_id: deckId, card_id: cardId, force_proxy: true,
+    }, () => `Proxy added to ${deckName(deckId)}.`);
+    if (result && proxyButton.isConnected) closeCardDetail();
+    else proxyButton.disabled = false;
+  });
   ui.detailActions.querySelector("[data-detail-add]").addEventListener("click", () => {
     mutate("/api/collection/add", { card: entry.card }, () => `Added ${entry.name}.`);
   });
@@ -1791,7 +1816,32 @@ function exportDeck() {
   sections.push("", "Deck", ...sortLines(cards).map(asLine));
   const maybeboard = deck.cards.filter((line) => line.zone === "maybeboard");
   if (maybeboard.length) sections.push("", "Maybeboard", ...sortLines(maybeboard).map(asLine));
-  ui.deckExportText.value = sections.join("\n") + "\n";
+  openListExport("Copy decklist", sections.join("\n") + "\n",
+    "This is ready to paste into the app’s deck importer or another decklist tool.");
+}
+
+function wishlistExportText(items) {
+  const names = new Map();
+  for (const item of items) {
+    const name = item.card?.name || item.name;
+    if (name && item.quantity > 0) names.set(name, (names.get(name) || 0) + item.quantity);
+  }
+  return [...names].sort(([a], [b]) => a.localeCompare(b))
+    .map(([name, quantity]) => `${quantity} ${name}`).join("\n");
+}
+
+function exportWishlist() {
+  const text = wishlistExportText(state.library.wishlist || []);
+  if (!text) return setStatus("Your wishlist is empty.");
+  openListExport("Export wishlist", text + "\n",
+    "Copy this quantity-and-name list into another site. Uses the wishlist’s merged quantities; different printings of the same card are combined.");
+}
+
+function openListExport(title, text, description) {
+  el("deckExportTitle").textContent = title;
+  el("deckExportDescription").textContent = description;
+  ui.deckExportText.setAttribute("aria-label", title);
+  ui.deckExportText.value = text;
   ui.deckExportDialog.hidden = false;
   ui.deckExportText.focus();
   ui.deckExportText.select();
@@ -1805,11 +1855,11 @@ async function copyDeckExport() {
     ui.deckExportText.focus();
     ui.deckExportText.select();
     if (!document.execCommand("copy")) {
-      setStatus("Select the decklist and copy it manually.", true);
+      setStatus("Select the list and copy it manually.", true);
       return;
     }
   }
-  setStatus("Decklist copied to the clipboard.");
+  setStatus("List copied to the clipboard.");
 }
 
 async function refreshDeckPrices() {
@@ -2163,6 +2213,10 @@ ui.printings.addEventListener("change", () => {
 });
 
 document.addEventListener("keydown", (event) => {
+  if (!ui.deckExportDialog.hidden) {
+    if (event.key === "Escape") { event.preventDefault(); ui.deckExportDialog.hidden = true; }
+    return;
+  }
   if (!ui.cardDetailDialog.hidden) {
     if (event.key === "Escape") { event.preventDefault(); closeCardDetail(); }
     return;
@@ -2227,6 +2281,7 @@ ui.wishlistAddBtn.addEventListener("click", addToWishlist);
 ui.removeBtn.addEventListener("click", () => state.card && removeFromCollection(state.card.id));
 ui.viewCollectionBtn.addEventListener("click", showCollectionView);
 ui.wishlistBtn.addEventListener("click", showWishlistView);
+ui.wishlistExportBtn.addEventListener("click", exportWishlist);
 ui.openFolderBtn.addEventListener("click", openFolder);
 ui.collectionFilter.addEventListener("input", renderCollection);
 ui.collectionSort.addEventListener("change", setCollectionSort);

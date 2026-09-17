@@ -323,6 +323,35 @@ class MutationPatchTests(unittest.TestCase):
         self.assertEqual(converted["summary"]["allocated"], 0)
         self.assertEqual(converted["entries"][0]["available"], 1)
 
+    def test_explicit_proxy_add_keeps_owned_copies_free_and_updates_wishlist(self):
+        store.add_card(self.user_id, card("bolt", "Lightning Bolt"), 2)
+        deck_id = store.create_deck(self.user_id, "Proxies")
+        for quantity in (1, 2):
+            result = self.post("/api/decks/add", {
+                "deck_id": deck_id, "card_id": "bolt", "force_proxy": True})
+            self.assertTrue(result["proxy_added"])
+            self.assertEqual(result["entries"][0]["available"], 2)
+            self.assertEqual(result["summary"]["allocated"], 0)
+            self.assertEqual(result["decks"][0]["cards"][0]["quantity"], quantity)
+            self.assertEqual(result["wishlist"][0]["proxy_quantity"], quantity)
+
+    def test_explicit_proxy_rejects_owned_row_and_other_users_decks(self):
+        store.add_card(self.user_id, card("bolt", "Lightning Bolt"), 2)
+        deck_id = store.create_deck(self.user_id)
+        store.deck_add(self.user_id, deck_id, "bolt")
+        before = store.export_profile(self.user_id)
+        response = self.client.post("/api/decks/add", json={
+            "deck_id": deck_id, "card_id": "bolt", "force_proxy": True})
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("already uses owned copies", response.get_json()["error"])
+        self.assertEqual(store.export_profile(self.user_id), before)
+        other_user = auth.create_user("proxy-other", "a long test password")
+        other_deck = store.create_deck(other_user)
+        response = self.client.post("/api/decks/add", json={
+            "deck_id": other_deck, "card_id": "bolt", "force_proxy": True})
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(store.deck_state(other_user, other_deck)["cards"], [])
+
     def test_password_change_requires_current_password_and_validates_new_password(self):
         url = "/api/account/password"
         original = "a long test password"

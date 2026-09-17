@@ -421,7 +421,7 @@ def _zone(value):
     return value
 
 
-def deck_add(user_id, deck_id, card_id=None, quantity=1, card=None, zone="main"):
+def deck_add(user_id, deck_id, card_id=None, quantity=1, card=None, zone="main", force_proxy=False):
     """Add an owned card, or cache an unowned card as a clearly marked proxy."""
     quantity = max(1, int(quantity))
     zone = _zone(zone)
@@ -443,10 +443,13 @@ def deck_add(user_id, deck_id, card_id=None, quantity=1, card=None, zone="main")
                 "This printing is already in the %s. Open it to move it instead."
                 % ("main deck" if existing["zone"] == "main" else "maybeboard")
             )
+        if force_proxy and existing and not existing["proxy"]:
+            raise StoreError("This printing already uses owned copies in that deck. "
+                             "Mark its existing row as proxy in the deck first, or choose another deck.")
         # Adding another copy to an existing proxy line keeps that line a proxy.
         # The user can deliberately switch it to an owned copy from its detail view.
-        proxy = not owned or bool(existing and existing["proxy"])
-        if proxy and not card and not (existing and existing["proxy"]):
+        proxy = force_proxy or not owned or bool(existing and existing["proxy"])
+        if proxy and not owned and not card and not (existing and existing["proxy"]):
             raise StoreError("That card is not in your collection.")
 
         if owned and zone == "main" and not proxy:
