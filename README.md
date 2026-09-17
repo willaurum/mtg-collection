@@ -272,12 +272,26 @@ gutting your list. Deleting a deck hands its copies straight back.
 
 ### The deck view
 
-**Opening-hand practice.** Use **Draw opening hand** to draw up to seven random
-cards from the main deck. Copy counts are respected, proxies are included, and
-the designated commander and maybeboard are excluded. **Shuffle & draw again**
-starts a fresh hand without changing your saved deck or collection. Small decks
-draw all available cards. This is an opening-hand preview, not a gameplay or
-mulligan rules engine.
+**Manual goldfishing.** Use **Goldfish / Practice** to start a practice game with
+seven cards (or all available cards in a smaller deck). Main-deck copy counts
+and proxies are included; the commander starts in the command zone and the
+maybeboard stays out. The library is face down. Select cards in any visible
+zone to move them to hand, battlefield, graveyard, exile, command zone, or the
+top/bottom of the library. Battlefield cards can tap/untap; selected cards can
+receive generic counters or switch faces when available. Zone changes clear
+tap state, counters, and the chosen face.
+
+Use **Draw one**, **Shuffle library**, **Untap all**, or **Next turn: untap + draw**
+for routine actions. Life starts at 40 with a commander or 20 otherwise and can
+be adjusted. Create named tokens on the battlefield and remove them manually.
+**Mulligan: draw 7** shuffles your hand into the remaining library and redraws;
+bottom cards yourself for your chosen mulligan rules. Other zones are unchanged.
+Card effects, timing, mana, token cleanup, and game rules are resolved manually.
+
+**Undo** restores up to 50 prior actions, including randomized draws and resets.
+Closing and reopening practice resumes that deck's session while the page stays
+open; reloading clears practice sessions. **Reset game** starts over using the
+current saved deck. Practice never changes collection quantities or deck lists.
 
 Laid out like Archidekt: one column per card type, cards stacked so only each
 title bar shows, and hovering lifts a card clear of the ones below it. Columns

@@ -406,7 +406,7 @@
         </div>
         <div class="head-actions">
           <button class="btn quiet" id="deckExportBtn">Copy decklist</button>
-          <button class="btn" id="goldfishBtn">Draw opening hand</button>
+          <button class="btn" id="goldfishBtn">Goldfish / Practice</button>
           <button class="btn quiet" id="proxyListBtn" hidden>Proxies</button>
           <button class="btn quiet danger" id="deleteDeckBtn">Delete deck</button>
         </div>
@@ -503,13 +503,51 @@
 
 <div class="deck-export-overlay" id="goldfishDialog" hidden>
   <section class="deck-export-dialog goldfish-dialog" role="dialog" aria-modal="true" aria-labelledby="goldfishTitle">
-    <button class="detail-close" id="goldfishCloseBtn" aria-label="Close opening hand">×</button>
-    <h2 id="goldfishTitle">Opening hand</h2>
-    <p class="sub">Main deck only, including proxies. Commander and maybeboard stay out. Each redraw starts with a fresh shuffle.</p>
+    <button class="detail-close" id="goldfishCloseBtn" aria-label="Close practice">×</button>
+    <h2 id="goldfishTitle">Practice</h2>
+    <p class="sub">Manual sandbox: you resolve card rules. Main deck and proxies included; commander starts in the command zone. Progress stays while this page is open. Reset to load deck edits.</p>
+    <div class="practice-toolbar" id="practiceControls">
+      <button class="btn primary" id="practiceDraw" data-practice="draw">Draw one</button>
+      <button class="btn" data-practice="shuffle">Shuffle library</button>
+      <button class="btn" data-practice="mulligan">Mulligan: draw 7</button>
+      <button class="btn" data-practice="untap">Untap all</button>
+      <button class="btn" data-practice="turn">Next turn: untap + draw</button>
+      <button class="btn" id="practiceUndo" data-practice="undo">Undo</button>
+      <button class="btn quiet" data-practice="reset">Reset game</button>
+    </div>
+    <div class="practice-toolbar">
+      <strong id="practiceTurn">Turn 1</strong>
+      <span>Life: <b id="practiceLife" aria-live="polite">20</b></span>
+      <button class="btn" id="practiceLifeDown" aria-label="Lose one life">−1</button>
+      <button class="btn" id="practiceLifeUp" aria-label="Gain one life">+1</button>
+      <form id="practiceTokenForm" class="practice-toolbar">
+        <input id="practiceTokenName" class="mini-input" maxlength="80" placeholder="Token name, e.g. 1/1 Soldier" aria-label="Token name">
+        <button class="btn" type="submit">Create token</button>
+      </form>
+    </div>
     <p class="sub" id="goldfishSummary" role="status" aria-live="polite"></p>
+    <nav class="practice-toolbar" id="practiceZones" aria-label="Practice card zones"></nav>
+    <p class="sub" id="practiceZoneHint"></p>
+    <div class="practice-card-actions" id="practiceCardActions" hidden>
+      <strong id="practiceSelectedName"></strong>
+      <div class="practice-toolbar">
+        <select id="practiceDestination" class="view-select" aria-label="Move selected card to">
+          <option value="battlefield">Battlefield</option><option value="hand">Hand</option>
+          <option value="graveyard">Graveyard</option><option value="exile">Exile</option>
+          <option value="command">Command zone</option><option value="library:top">Library top</option>
+          <option value="library:bottom">Library bottom</option>
+        </select>
+        <button class="btn" id="practiceMove" data-card-action="move">Move</button>
+        <button class="btn" id="practiceTap" data-card-action="tap">Tap</button>
+        <button class="btn" id="practiceFlip" data-card-action="flip">Flip face</button>
+        <button class="btn" id="practiceCounterDown" data-card-action="counter" data-delta="-1">− counter</button>
+        <button class="btn" data-card-action="counter" data-delta="1">+ counter</button>
+        <button class="btn" id="practiceRemoveToken" data-card-action="removeToken">Remove token</button>
+      </div>
+      <p class="sub">Counters are generic. Moving between zones clears tap, face, and counters. Tokens are removed manually when appropriate.</p>
+    </div>
     <div class="goldfish-hand" id="goldfishHand"></div>
-    <div class="import-actions"><button class="btn primary" id="goldfishRedrawBtn">Shuffle &amp; draw again</button>
-      <button class="btn quiet" id="goldfishDoneBtn">Close</button></div>
+    <div class="import-actions"><button class="btn quiet" id="goldfishDoneBtn">Close practice</button></div>
   </section>
 </div>
 
@@ -567,6 +605,8 @@
 
 <aside id="backupReminder" class="backup-reminder" role="status" hidden><p>Time to back up your collection.</p><button class="btn" id="backupNow">Export profile</button><button class="btn quiet" id="backupDismiss">Remind me tomorrow</button></aside>
 <script src="/static/settings.js"></script>
+<script src="/static/goldfish.js"></script>
+<script src="/static/goldfish-ui.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

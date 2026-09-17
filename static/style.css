@@ -748,6 +748,17 @@ kbd {
 .goldfish-hand figure { margin: 0; }
 .goldfish-hand .thumb { display: grid; place-items: center; }
 .goldfish-hand figcaption { margin-top: 6px; font-size: calc(12px * var(--text-scale, 1)); }
+.practice-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0; }
+.practice-toolbar form { margin: 0; }
+.practice-toolbar input { max-width: 100%; }
+.practice-card { padding: 6px; border: 2px solid transparent; border-radius: 8px; background: var(--elevate); color: var(--text); cursor: pointer; text-align: left; min-width: 0; }
+.practice-card .thumb { display: grid; width: 100%; }
+.practice-card > span:not(.thumb), .practice-card small { display: block; margin-top: 6px; overflow-wrap: anywhere; }
+.practice-card small { color: var(--dim); }
+.practice-card.selected, .practice-card:focus-visible { border-color: var(--gold); }
+.practice-card.tapped .thumb { transform: rotate(8deg) scale(.88); opacity: .7; }
+.practice-card-actions { padding: 12px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--elevate); }
+.goldfish-hand { grid-template-columns: repeat(auto-fill, minmax(125px, 1fr)); }
 
 .thumb {
   position: relative;
