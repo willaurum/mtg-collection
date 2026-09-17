@@ -87,9 +87,6 @@
     <button class="nav" id="importBtn" data-view="import">
       <svg class="ico"><use href="#i-import"/></svg><span>Import</span>
     </button>
-    <button class="nav" id="scannerBtn" type="button">
-      <svg class="ico"><use href="#i-card"/></svg><span>Scan cards</span>
-    </button>
 
     <div class="rail-group grow">
       <div class="rail-head"><span>Recent</span></div>
@@ -538,32 +535,7 @@
 </div>
 
 <aside id="backupReminder" class="backup-reminder" role="status" hidden><p>Time to back up your collection.</p><button class="btn" id="backupNow">Export profile</button><button class="btn quiet" id="backupDismiss">Remind me tomorrow</button></aside>
-<dialog id="scannerDialog" class="scanner-dialog" aria-labelledby="scannerTitle">
-  <header class="scanner-head"><div><p class="detail-kicker">Webcam scanner</p><h2 id="scannerTitle">Scan into your collection</h2></div>
-    <button id="scannerClose" class="btn quiet" aria-label="Close scanner">Close</button></header>
-  <p id="scannerStatus" class="scanner-status" role="status" aria-live="polite"></p>
-  <div id="scannerCapture">
-    <div class="scanner-camera"><video id="scannerVideo" autoplay muted playsinline></video><div class="scanner-guide"><span>Card name</span></div></div>
-    <p class="sub">Keep the camera still. Hold one card upright inside the outline, with its name at the top. Use even lighting without glare.</p>
-    <button id="scannerCalibrate" class="btn" disabled>Frame is empty — start scanning</button>
-  </div>
-  <section id="scannerReview" class="scanner-review" hidden aria-label="Review scanned card">
-    <div class="art-column"><div class="art-frame"><img id="scannerArt" alt=""></div><button id="scannerFlip" class="btn block" hidden>Flip card</button></div>
-    <div class="details"><header class="card-head"><h2 id="scannerName"></h2><span id="scannerMana" class="mana"></span></header>
-      <p id="scannerType" class="typeline"></p><div id="scannerRules" class="rules"></div>
-      <label for="scannerPrintings">Printing</label><select id="scannerPrintings" class="deck-picker"></select>
-      <p id="scannerPrintingStatus" class="sub" role="status"></p><div id="scannerPrices" class="chips"></div>
-      <p id="scannerOwned" class="owned"></p>
-      <button id="scannerAdd" class="btn primary">Add one to collection · Enter</button>
-    </div>
-  </section>
-  <footer class="scanner-footer">
-    <form id="scannerSearchForm"><label for="scannerSearch">Correct or enter a card name</label><div class="scanner-search"><input id="scannerSearch" class="mini-input" autocomplete="off" placeholder="Card name"><button class="btn" id="scannerFind">Find card</button></div></form>
-    <div class="scanner-controls"><button id="scannerRescan" class="btn" disabled>Rescan · R</button><span class="sub">Enter adds one copy · R rescans · Esc closes</span></div>
-  </footer>
-</dialog>
 <script src="/static/settings.js"></script>
 <script src="/static/app.js"></script>
-<script src="/static/scanner.js"></script>
 </body>
 </html>
