@@ -33,6 +33,49 @@ open <http://127.0.0.1:5000>:
 python server.py
 ```
 
+## Scanning cards with a webcam
+
+Choose **Scan cards** in the sidebar and allow camera access. Keep the camera
+still, leave the outlined area empty, and click **Frame is empty — start scanning**.
+Then hold one card upright inside the outline. The scanner reads its English
+name automatically once the image is steady.
+
+Review the matching card, select its printing, and press **Enter** (or click
+**Add one to collection**). Each confirmation adds one copy. Remove the card
+completely from the outline until the scanner says it is ready, then present
+the next card. Consecutive copies of the same card are supported. Press **R**
+or **Rescan** to read the current card again without waiting for removal.
+You can also correct the name and choose **Find card**; Enter in the name field
+searches rather than adding. Escape closes the scanner and stops the webcam.
+
+Use good lighting, avoid sleeve glare, and keep the card's name in the top of
+the guide. The scanner identifies names, not exact printings or foil finishes;
+always check the match. If the camera or background moves, clear the outline
+and click **Reset empty frame**. Removal detection compares the scene to this
+empty frame, so a fixed camera and plain background work best.
+
+Camera access requires **HTTPS or localhost** and a browser/webview that supports
+camera permissions. An ordinary HTTP address on another machine (including a
+Pi's LAN address) cannot access the webcam. If your desktop webview does not
+offer camera access, use a current desktop browser at an HTTPS or localhost URL.
+Recognition runs in the browser using Tesseract.js 6.0.1. The OCR library, worker,
+and English model download on first use; an internet connection is needed, as it
+is for Scryfall lookups. Camera frames are not uploaded; recognized names are
+sent to the app's existing Scryfall lookup.
+
+Scanner browser regression checks use Playwright with a simulated webcam and
+OCR responses, without touching the real collection or camera:
+
+```bash
+node tests/test_scanner.cjs
+```
+
+Install Playwright and its Chromium browser in your development environment,
+or set `SCANNER_BROWSER=msedge` to use an installed Edge browser.
+Set `SCANNER_REAL_OCR=1` to additionally exercise the actual OCR library and
+downloaded English model against a generated webcam title image. These checks
+do not replace testing recognition with your physical cards and camera.
+
 ## Building an .exe
 
 ```bash

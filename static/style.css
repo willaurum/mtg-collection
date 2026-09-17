@@ -611,6 +611,27 @@ kbd {
 #printings { width: 100%; }
 .detail-printing label { display: block; margin-bottom: 6px; color: var(--dim); font-size: 12px; }
 .detail-printing select { width: 100%; min-width: 0; }
+
+.scanner-dialog { width: min(940px, calc(100vw - 48px)); max-height: calc(100vh - 48px); padding: 26px; border: 1px solid var(--line); border-radius: 18px; background: var(--bg); color: var(--text); overflow-y: auto; }
+.scanner-dialog::backdrop { background: rgba(0, 0, 0, .78); }
+.scanner-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.scanner-head h2 { margin: 0; font-family: var(--display); font-weight: 500; }
+.scanner-status { padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; color: var(--gold); line-height: 1.5; min-height: 48px; }
+.scanner-camera { position: relative; width: min(100%, 680px); margin: 0 auto; background: #111; overflow: hidden; border-radius: 10px; }
+.scanner-camera video { display: block; width: 100%; min-height: 200px; }
+.scanner-guide { position: absolute; top: 10%; left: 50%; height: 80%; aspect-ratio: 63 / 88; transform: translateX(-50%); border: 2px solid #ebcd88; border-radius: 10px; box-shadow: 0 0 0 100vmax #0005; pointer-events: none; }
+.scanner-guide span { display: block; margin: 4% 6%; padding-bottom: 5%; color: #fff; font-size: 11px; border-bottom: 1px dashed #ebcd88; text-shadow: 0 1px 3px #000; }
+.scanner-review { display: grid; grid-template-columns: minmax(180px, 300px) minmax(0, 1fr); gap: 28px; }
+.scanner-review .art-frame { width: 100%; }
+.scanner-review .art-frame img { display: block; width: 100%; opacity: 1; }
+.scanner-review h2 { margin: 0; font-family: var(--display); }
+.scanner-review label, .scanner-footer label { display: block; margin: 14px 0 7px; font-size: 12px; color: var(--dim); }
+.scanner-review select { width: 100%; }
+.scanner-footer { margin-top: 22px; border-top: 1px solid var(--line); }
+.scanner-search, .scanner-controls { display: flex; align-items: center; gap: 12px; }
+.scanner-search input { flex: 1; min-width: 0; }
+.scanner-controls { margin-top: 16px; flex-wrap: wrap; }
+@media (max-width: 650px) { .scanner-review { grid-template-columns: 1fr; } .scanner-review .art-column { max-width: 230px; margin: auto; } .scanner-dialog { padding: 18px; } }
 #printings:disabled { opacity: 0.55; }
 #printings:focus, .deck-picker:focus, .mini-input:focus { border-color: var(--line-2); }
 
