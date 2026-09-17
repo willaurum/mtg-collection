@@ -38,6 +38,7 @@ app = Flask(
 )
 auth.configure(app)
 db.migrate()
+app.logger.warning("Database ready: %s (schema %s)", db.db_path(), db.version(db.connect()))
 
 # A single-user desktop launch skips the login form: there is nobody else on
 # the machine to keep out, and the data never leaves it.
@@ -59,6 +60,14 @@ def _no_store(response):
     if response.mimetype in ("text/html", "text/css", "application/javascript"):
         response.headers["Cache-Control"] = "no-store"
     return response
+
+
+@app.errorhandler(500)
+def internal_server_error(error):
+    if request.path.startswith("/api/"):
+        return jsonify(error="The server could not complete this request. "
+                             "Check the mtgviewer service log for details."), 500
+    return error
 
 
 @app.route("/")

@@ -219,7 +219,12 @@ async function getJson(url, options) {
     window.location = "/login?next=" + encodeURIComponent(location.pathname);
     throw new Error("Signed out.");
   }
-  const payload = await response.json();
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new Error(`Request failed (${response.status}): the server returned an unexpected response. Check the mtgviewer service log.`);
+  }
   if (!response.ok) {
     const error = new Error(payload.error || `Request failed (${response.status})`);
     error.suggestions = payload.suggestions || [];
@@ -561,6 +566,9 @@ async function loadLibrary() {
   try {
     applyLibrary(await getJson("/api/library"));
   } catch (error) {
+    ui.collSummary.textContent = "Collection could not be loaded.";
+    ui.collEmpty.hidden = false;
+    ui.collEmpty.textContent = "The server could not load your collection. Refresh to retry; this is not an empty collection result.";
     setStatus(error.message, true);
   }
 }

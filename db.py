@@ -17,7 +17,7 @@ import sqlite3
 import sys
 import threading
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 SCHEMA = """
 CREATE TABLE users (
@@ -204,9 +204,12 @@ def migrate(conn=None):
                )"""
         )
         current = 5
-    if current < 6:
+    if current < 7:
+        # Repair installations marked version 6 where the wishlist table is
+        # absent. IF NOT EXISTS also preserves already-created wishlist data
+        # if an earlier migration stopped before recording its version.
         conn.execute(
-            """CREATE TABLE wishlist (
+            """CREATE TABLE IF NOT EXISTS wishlist (
                  user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
                  card_id TEXT NOT NULL REFERENCES cards (id),
                  quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
@@ -214,7 +217,7 @@ def migrate(conn=None):
                  PRIMARY KEY (user_id, card_id)
                )"""
         )
-        current = 6
+        current = 7
     # Later versions add their steps here, guarded by `current < N`.
     conn.execute(
         "INSERT INTO meta (key, value) VALUES ('schema_version', ?) "

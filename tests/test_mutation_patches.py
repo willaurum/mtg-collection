@@ -73,6 +73,17 @@ class MutationPatchTests(unittest.TestCase):
         self.assertEqual(changed["summary"]["distinct"], 2)
         self.assertNotIn("library", changed)
 
+    def test_library_failure_returns_json_and_preserves_collection(self):
+        store.add_card(self.user_id, card("saved", "Saved Card"), 3)
+        with patch.dict(app.config, PROPAGATE_EXCEPTIONS=False), \
+             patch("store.library", side_effect=RuntimeError("library unavailable")), \
+             self.assertLogs(app.logger, level="ERROR"):
+            response = self.client.get("/api/library")
+        self.assertEqual(response.status_code, 500)
+        self.assertTrue(response.is_json)
+        self.assertIn("service log", response.get_json()["error"])
+        self.assertEqual(store.entry(self.user_id, "saved")["quantity"], 3)
+
     def test_deck_patch_updates_only_the_affected_deck_and_card(self):
         self.post("/api/collection/add", {"card": card("bolt", "Lightning Bolt")})
         created = self.post("/api/decks/create", {"name": "Burn"})
