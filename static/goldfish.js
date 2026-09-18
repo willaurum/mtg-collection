@@ -34,6 +34,9 @@
     return game;
   }
   function act(game, action, random = Math.random) {
+    if (action.type === "batch") {
+      return (action.actions || []).reduce((state, item) => act(state, item, random), game);
+    }
     const next = clone(game);
     const card = next.cards[action.id];
     switch (action.type) {
@@ -46,6 +49,7 @@
         for (const id of next.zones.hand) {
           if (next.cards[id].token) { delete next.cards[id]; continue; }
           next.cards[id].tapped = false; next.cards[id].counters = 0; next.cards[id].face = 0;
+          next.cards[id].namedCounters = {}; next.cards[id].faceDown = false;
           next.zones.library.push(id);
         }
         next.zones.hand = [];
@@ -56,9 +60,21 @@
       case "move": {
         if (!card || !zones.includes(action.zone)) return game;
         const from = zones.find(z => next.zones[z].includes(action.id));
-        if (from === action.zone && action.zone !== "library") return game;
+        if (from === action.zone && action.zone !== "library" && action.zone !== "battlefield") return game;
         next.zones[from] = next.zones[from].filter(id => id !== action.id);
-        card.tapped = false; card.counters = 0; card.face = 0;
+        if (card.token && from === "battlefield" && action.zone !== "battlefield") {
+          delete next.cards[action.id];
+          next.message = "Token left the battlefield and was removed.";
+          break;
+        }
+        if (from !== action.zone) {
+          card.tapped = false; card.counters = 0; card.face = 0;
+          card.namedCounters = {}; card.faceDown = false;
+        }
+        if (action.zone === "battlefield") {
+          card.x = Number.isFinite(action.x) ? action.x : 40 + (next.zones.battlefield.length % 8) * 35;
+          card.y = Number.isFinite(action.y) ? action.y : 40;
+        }
         if (action.zone === "library" && action.position !== "bottom") next.zones.library.unshift(action.id);
         else next.zones[action.zone].push(action.id);
         next.message = `Moved ${card.card.name || "card"} to ${action.zone}${action.zone === "library" ? ` (${action.position || "top"})` : ""}.`;
@@ -69,8 +85,17 @@
         card.tapped = !card.tapped; next.message = card.tapped ? "Tapped." : "Untapped."; break;
       case "counter":
         if (!card) return game;
-        card.counters = Math.max(0, card.counters + action.delta);
-        next.message = `Counters: ${card.counters}.`; break;
+        if (!Number.isInteger(action.delta)) return game;
+        if (action.name) {
+          card.namedCounters ||= {};
+          const name = String(action.name).trim().slice(0, 40);
+          if (!name || ["__proto__", "constructor", "prototype"].includes(name)) return game;
+          card.namedCounters[name] = Math.max(0, (card.namedCounters[name] || 0) + action.delta);
+        } else card.counters = Math.max(0, card.counters + action.delta);
+        next.message = action.name ? `${action.name}: ${card.namedCounters[String(action.name).trim().slice(0, 40)]}.` : `Counters: ${card.counters}.`; break;
+      case "faceDown":
+        if (!card) return game;
+        card.faceDown = !card.faceDown; next.message = "Turned card over."; break;
       case "flip":
         if (!card || !card.card.card_faces || card.card.card_faces.length < 2) return game;
         card.face = card.face ? 0 : 1; next.message = "Card face changed."; break;
@@ -86,11 +111,20 @@
         next.message = `Turn ${next.turn}: untapped and drew ${draw(next, 1)}. Resolve upkeep and other effects manually.`;
         break;
       case "token": {
-        const name = String(action.name || "Token").trim().slice(0, 80) || "Token";
+        const name = String(action.card?.name || action.name || "Token").trim().slice(0, 80) || "Token";
         const id = String(next.nextId++);
-        next.cards[id] = { id, card: { name, type_line: "Token" }, token: true,
-          tapped: false, counters: 0, face: 0, proxy: false };
+        next.cards[id] = { id, card: action.card ? clone(action.card) : { name, type_line: "Token" }, token: true,
+          tapped: false, counters: 0, face: 0, proxy: false,
+          x: Number.isFinite(action.x) ? Math.max(0, action.x) : 40 + (next.zones.battlefield.length % 8) * 35,
+          y: Number.isFinite(action.y) ? Math.max(0, action.y) : 40 };
         next.zones.battlefield.push(id); next.message = `Created ${name}.`; break;
+      }
+      case "copy": {
+        if (!card) return game;
+        const id = String(next.nextId++);
+        next.cards[id] = { ...clone(card), id, token: true, tapped: false,
+          x: (card.x || 40) + 25, y: (card.y || 40) + 25 };
+        next.zones.battlefield.push(id); next.message = "Created token copy."; break;
       }
       case "removeToken":
         if (!card || !card.token) return game;

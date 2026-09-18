@@ -272,26 +272,42 @@ gutting your list. Deleting a deck hands its copies straight back.
 
 ### The deck view
 
-**Manual goldfishing.** Use **Goldfish / Practice** to start a practice game with
-seven cards (or all available cards in a smaller deck). Main-deck copy counts
-and proxies are included; the commander starts in the command zone and the
-maybeboard stays out. The library is face down. Select cards in any visible
-zone to move them to hand, battlefield, graveyard, exile, command zone, or the
-top/bottom of the library. Battlefield cards can tap/untap; selected cards can
-receive generic counters or switch faces when available. Zone changes clear
-tap state, counters, and the chosen face.
+**Manual goldfishing (desktop).** **Goldfish / Practice** opens a full tabletop in
+the app's current theme. Main-deck quantities and proxies are included, the
+commander starts in the command zone, and maybeboard cards stay out. Start with
+seven cards (or all available cards in smaller decks).
 
-Use **Draw one**, **Shuffle library**, **Untap all**, or **Next turn: untap + draw**
-for routine actions. Life starts at 40 with a commander or 20 otherwise and can
-be adjusted. Create named tokens on the battlefield and remove them manually.
-**Mulligan: draw 7** shuffles your hand into the remaining library and redraws;
-bottom cards yourself for your chosen mulligan rules. Other zones are unchanged.
-Card effects, timing, mana, token cleanup, and game rules are resolved manually.
+Drag cards from your hand or any open zone onto the battlefield. Cards stay at
+their exact dropped positions, can overlap, and can be moved freely. Ctrl-click
+adds cards to a selection; dragging empty battlefield selects an area. Drag a
+selected group to move it together. Right-click a card for its actions (or actions
+for the selected group). Double-click a battlefield card to tap it;
+double-click a card elsewhere to put it on the battlefield. Hover for a readable
+preview. Click zone headings to browse cards; the library has a name filter.
+Drop on zone panels or the hand to move cards; library drops go on top. Use the
+selected-card Move control to put cards on the library bottom.
 
-**Undo** restores up to 50 prior actions, including randomized draws and resets.
-Closing and reopening practice resumes that deck's session while the page stays
-open; reloading clears practice sessions. **Reset game** starts over using the
-current saved deck. Practice never changes collection quantities or deck lists.
+The side controls support tapping, flipping double-faced cards, turning cards
+face down, generic or named counters, token copies, and named custom tokens.
+Moving between zones clears tapping, counters, and face state; rearranging the
+battlefield preserves them. Tokens disappear automatically when they leave the
+battlefield; Undo restores them. Right-click empty battlefield for token
+creation, draw, untap, next turn, and
+shuffle. **Find token art** searches Scryfall tokens; select the artwork to place
+it on the field (at the right-click location when opened there). Search by name
+or filters such as `Soldier pow:1 tou:1`; Previous/Next browse artwork pages.
+**Create custom token** still makes a named placeholder without a network request.
+There is no mana or rules enforcement.
+
+**Next turn** untaps the battlefield and draws one card. Draw, shuffle, untap,
+life adjustment, and mulligans are also available separately. Mulligans shuffle
+the hand back and draw seven; bottom cards manually for your chosen rules.
+Shortcuts outside text inputs: **D** draw, **N** next turn, **T** tap selection,
+**F** flip selection, **G** move to graveyard, **H** move to hand, **Ctrl+Z** undo.
+**Undo** restores up to 50 actions, with a group drag counting as one action.
+Every opening starts fresh; closing or reloading discards the session. **Reset**
+starts again with the saved deck. Practice never changes your saved collection
+or deck lists.
 
 Laid out like Archidekt: one column per card type, cards stacked so only each
 title bar shows, and hovering lifts a card clear of the ones below it. Columns

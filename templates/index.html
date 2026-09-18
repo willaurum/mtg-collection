@@ -503,51 +503,79 @@
 
 <div class="deck-export-overlay" id="goldfishDialog" hidden>
   <section class="deck-export-dialog goldfish-dialog" role="dialog" aria-modal="true" aria-labelledby="goldfishTitle">
-    <button class="detail-close" id="goldfishCloseBtn" aria-label="Close practice">×</button>
-    <h2 id="goldfishTitle">Practice</h2>
-    <p class="sub">Manual sandbox: you resolve card rules. Main deck and proxies included; commander starts in the command zone. Progress stays while this page is open. Reset to load deck edits.</p>
+    <header class="practice-header">
+      <div><h2 id="goldfishTitle">Practice</h2><p class="sub">Manual tabletop · Drag to place · Double-click to tap · Right-click for actions · Ctrl-click or drag empty field to select multiple</p></div>
+      <button class="btn quiet" id="goldfishCloseBtn" aria-label="Close practice">Close ×</button>
+    </header>
     <div class="practice-toolbar" id="practiceControls">
-      <button class="btn primary" id="practiceDraw" data-practice="draw">Draw one</button>
-      <button class="btn" data-practice="shuffle">Shuffle library</button>
-      <button class="btn" data-practice="mulligan">Mulligan: draw 7</button>
+      <button class="btn primary" id="practiceDraw" data-practice="draw" title="Draw (D)">Draw</button>
+      <button class="btn" data-practice="turn" title="Untap and draw (N)">Next turn</button>
       <button class="btn" data-practice="untap">Untap all</button>
-      <button class="btn" data-practice="turn">Next turn: untap + draw</button>
-      <button class="btn" id="practiceUndo" data-practice="undo">Undo</button>
-      <button class="btn quiet" data-practice="reset">Reset game</button>
-    </div>
-    <div class="practice-toolbar">
+      <button class="btn" data-practice="shuffle">Shuffle</button>
+      <button class="btn" data-practice="mulligan">Mulligan</button>
+      <button class="btn" id="practiceUndo" data-practice="undo" title="Undo (Ctrl+Z)">Undo</button>
+      <button class="btn quiet" data-practice="reset">Reset</button>
       <strong id="practiceTurn">Turn 1</strong>
-      <span>Life: <b id="practiceLife" aria-live="polite">20</b></span>
-      <button class="btn" id="practiceLifeDown" aria-label="Lose one life">−1</button>
-      <button class="btn" id="practiceLifeUp" aria-label="Gain one life">+1</button>
-      <form id="practiceTokenForm" class="practice-toolbar">
-        <input id="practiceTokenName" class="mini-input" maxlength="80" placeholder="Token name, e.g. 1/1 Soldier" aria-label="Token name">
-        <button class="btn" type="submit">Create token</button>
-      </form>
+      <span class="practice-life"><button class="btn" id="practiceLifeDown" aria-label="Lose one life">−</button> Life <b id="practiceLife">20</b> <button class="btn" id="practiceLifeUp" aria-label="Gain one life">+</button></span>
+      <details class="practice-help"><summary>Shortcuts</summary><p>D draw · N next turn · T tap selected · F flip selected · G graveyard · H hand · Ctrl+Z undo. Ctrl-click adds to selection. Drag selected cards together. Drag cards into zone headers. Library drops go on top; use Move for bottom. Mulligans draw seven; bottom cards manually. Closing ends this session.</p></details>
     </div>
-    <p class="sub" id="goldfishSummary" role="status" aria-live="polite"></p>
-    <nav class="practice-toolbar" id="practiceZones" aria-label="Practice card zones"></nav>
-    <p class="sub" id="practiceZoneHint"></p>
-    <div class="practice-card-actions" id="practiceCardActions" hidden>
-      <strong id="practiceSelectedName"></strong>
-      <div class="practice-toolbar">
-        <select id="practiceDestination" class="view-select" aria-label="Move selected card to">
-          <option value="battlefield">Battlefield</option><option value="hand">Hand</option>
-          <option value="graveyard">Graveyard</option><option value="exile">Exile</option>
-          <option value="command">Command zone</option><option value="library:top">Library top</option>
-          <option value="library:bottom">Library bottom</option>
-        </select>
-        <button class="btn" id="practiceMove" data-card-action="move">Move</button>
-        <button class="btn" id="practiceTap" data-card-action="tap">Tap</button>
-        <button class="btn" id="practiceFlip" data-card-action="flip">Flip face</button>
-        <button class="btn" id="practiceCounterDown" data-card-action="counter" data-delta="-1">− counter</button>
-        <button class="btn" data-card-action="counter" data-delta="1">+ counter</button>
-        <button class="btn" id="practiceRemoveToken" data-card-action="removeToken">Remove token</button>
+    <div class="practice-table">
+      <aside class="practice-zones" id="practiceZones" aria-label="Card zones"></aside>
+      <div class="practice-field-scroll" id="practiceFieldScroll">
+        <div class="practice-battlefield" id="practiceBattlefield" data-drop-zone="battlefield" aria-label="Battlefield">
+          <span class="practice-field-label">BATTLEFIELD <small>Place your cards anywhere</small></span>
+        </div>
       </div>
-      <p class="sub">Counters are generic. Moving between zones clears tap, face, and counters. Tokens are removed manually when appropriate.</p>
+      <aside class="practice-inspector">
+        <div id="practicePreview" class="practice-preview"><p class="sub">Hover a card to inspect it.</p></div>
+        <div id="practiceCardActions">
+          <strong id="practiceSelectedName">No cards selected</strong>
+          <div class="practice-toolbar">
+            <select id="practiceDestination" class="view-select" aria-label="Move selected cards to">
+              <option value="battlefield">Battlefield</option><option value="hand">Hand</option>
+              <option value="graveyard">Graveyard</option><option value="exile">Exile</option>
+              <option value="command">Command zone</option><option value="library:top">Library top</option>
+              <option value="library:bottom">Library bottom</option>
+            </select>
+            <button class="btn" data-card-action="move">Move</button>
+            <button class="btn" data-card-action="tap">Tap / untap</button>
+            <button class="btn" data-card-action="flip">Flip face</button>
+            <button class="btn" data-card-action="faceDown">Face down / up</button>
+            <input class="mini-input" id="practiceCounterName" maxlength="40" placeholder="Counter name (optional)" aria-label="Counter name">
+            <button class="btn" data-card-action="counter" data-delta="-1">− counter</button>
+            <button class="btn" data-card-action="counter" data-delta="1">+ counter</button>
+            <button class="btn" data-card-action="copy">Token copy</button>
+            <button class="btn" data-card-action="removeToken">Remove token</button>
+          </div>
+        </div>
+        <form id="practiceTokenForm" class="practice-toolbar">
+          <input id="practiceTokenName" class="mini-input" maxlength="80" placeholder="e.g. 1/1 Soldier" aria-label="Token name">
+          <button class="btn" type="submit">Find token art</button>
+          <button class="btn" type="button" id="practiceCustomToken">Create custom token</button>
+        </form>
+      </aside>
+      <section class="practice-hand-zone" data-drop-zone="hand">
+        <strong>HAND <span id="practiceHandCount"></span></strong>
+        <div class="goldfish-hand" id="goldfishHand"></div>
+      </section>
+      <section class="practice-zone-browser practice-token-picker" id="practiceTokenPicker" aria-label="Choose a token" hidden>
+        <form class="practice-toolbar" id="practiceTokenSearchForm">
+          <strong>Choose a token</strong>
+          <input class="mini-input" id="practiceTokenQuery" maxlength="200" placeholder="Soldier, Treasure, or Soldier pow:1 tou:1" aria-label="Search Scryfall tokens">
+          <button class="btn" type="submit">Search</button>
+          <button class="btn" type="button" id="practiceTokenClose">Close</button>
+        </form>
+        <p class="sub" id="practiceTokenStatus" role="status"></p>
+        <div id="practiceTokenResults"></div>
+        <div class="practice-toolbar"><button class="btn" id="practiceTokenPrev">Previous</button><span id="practiceTokenPage"></span><button class="btn" id="practiceTokenNext">Next</button></div>
+      </section>
+      <section class="practice-zone-browser" id="practiceZoneBrowser" hidden>
+        <div class="practice-toolbar"><strong id="practiceBrowserTitle"></strong><input class="mini-input" id="practiceSearch" placeholder="Filter cards…" aria-label="Filter zone cards"><button class="btn" id="practiceBrowserClose">Close zone</button></div>
+        <p class="sub">Drag a card onto the field or select it and use Move. Library is shown top to bottom; searching does not shuffle.</p>
+        <div id="practiceBrowserCards"></div>
+      </section>
     </div>
-    <div class="goldfish-hand" id="goldfishHand"></div>
-    <div class="import-actions"><button class="btn quiet" id="goldfishDoneBtn">Close practice</button></div>
+    <footer class="practice-footer"><span id="goldfishSummary" role="status" aria-live="polite"></span><button class="btn quiet" id="goldfishDoneBtn">Close practice</button></footer>
   </section>
 </div>
 

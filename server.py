@@ -182,6 +182,19 @@ def api_random():
     return _card_response(scryfall.random_card)
 
 
+@app.get("/api/tokens")
+@auth.api_login_required
+def api_tokens():
+    query = (request.args.get("q") or "").strip()
+    page = request.args.get("page", default=1, type=int)
+    if len(query) > 200 or page is None or not 1 <= page <= 1000:
+        return jsonify(error="Invalid token search or page."), 400
+    try:
+        return jsonify(scryfall.search_tokens(query, page))
+    except (scryfall.ScryfallError, TimeoutError) as exc:
+        return jsonify(error=str(exc)), 502
+
+
 @app.get("/api/autocomplete")
 @auth.api_login_required
 def api_autocomplete():

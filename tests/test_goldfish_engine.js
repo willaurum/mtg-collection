@@ -58,3 +58,57 @@ assert.equal(G.act(empty, {type: 'draw'}).zones.hand.length, 0);
 assert.equal(G.act(empty, {type: 'mulligan'}).zones.hand.length, 0);
 assert.equal(G.act(game, {type: 'move', id, zone: 'invalid'}), game);
 console.log('Manual simulator engine checks passed.');
+
+// A group move is one immutable transaction and preserves battlefield state.
+let table = G.create(deck, () => .5);
+const [one, two] = table.zones.hand;
+table = G.act(table, {type: 'batch', actions: [
+  {type: 'move', id: one, zone: 'battlefield', x: 123, y: 87},
+  {type: 'move', id: two, zone: 'battlefield', x: 160, y: 120},
+  {type: 'tap', id: one},
+  {type: 'counter', id: one, name: '+1/+1', delta: 2},
+  {type: 'faceDown', id: one}
+]});
+const snapshot = JSON.stringify(table);
+const moved = G.act(table, {type: 'batch', actions: [
+  {type: 'move', id: one, zone: 'battlefield', x: 231, y: 181},
+  {type: 'move', id: two, zone: 'battlefield', x: 268, y: 214}
+]});
+assert.equal(JSON.stringify(table), snapshot);
+assert.equal(moved.cards[one].x, 231);
+assert.equal(moved.cards[two].x - moved.cards[one].x, 37);
+assert.equal(moved.cards[one].tapped, true);
+assert.equal(moved.cards[one].namedCounters['+1/+1'], 2);
+assert.equal(moved.cards[one].faceDown, true);
+invariant(moved);
+const copied = G.act(moved, {type: 'copy', id: one});
+const copy = copied.cards[copied.zones.battlefield.at(-1)];
+assert.equal(copy.token, true);
+assert.notEqual(copy.id, one);
+assert.equal(copy.card.name, moved.cards[one].card.name);
+invariant(copied);
+const cleared = G.act(moved, {type: 'move', id: one, zone: 'hand'});
+assert.deepEqual(cleared.cards[one].namedCounters, {});
+assert.equal(cleared.cards[one].faceDown, false);
+const fresh = G.create(deck, () => .5);
+assert.equal(fresh.zones.battlefield.length, 0);
+assert.equal(fresh.turn, 1);
+console.log('Tabletop positioning, group actions, counters, copies, and fresh-game checks passed.');
+
+for (const zone of G.zones.filter(zone => zone !== 'battlefield')) {
+  const seeded = G.act(fresh, {type:'token', card:{name:'Soldier', image_uris:{normal:'token-art'}}, x:200, y:100});
+  const tokenId = seeded.zones.battlefield.at(-1);
+  assert.equal(seeded.cards[tokenId].card.image_uris.normal, 'token-art');
+  assert.equal(seeded.cards[tokenId].x, 200);
+  const removed = G.act(seeded, {type:'move', id:tokenId, zone});
+  assert.equal(removed.cards[tokenId], undefined);
+  assert.ok(!Object.values(removed.zones).flat().includes(tokenId));
+  assert.ok(seeded.cards[tokenId], 'Undo snapshot retains the token');
+  invariant(removed);
+  const repositioned = G.act(seeded, {type:'move', id:tokenId, zone:'battlefield', x:250, y:120});
+  assert.equal(repositioned.cards[tokenId].x, 250);
+}
+const copyRemoved = G.act(copied, {type:'move', id:copy.id, zone:'exile'});
+assert.equal(copyRemoved.cards[copy.id], undefined);
+invariant(copyRemoved);
+console.log('Token art, placement, and removal on every battlefield exit passed.');

@@ -1814,6 +1814,7 @@ function openGoldfish() {
 }
 
 function closeGoldfish() {
+  stopPractice();
   ui.goldfishDialog.hidden = true;
   ui.goldfishHand.innerHTML = "";
   ui.goldfishBtn.focus();
@@ -2230,7 +2231,7 @@ ui.printings.addEventListener("change", () => {
 
 document.addEventListener("keydown", (event) => {
   if (!ui.goldfishDialog.hidden) {
-    if (event.key === "Escape") { event.preventDefault(); closeGoldfish(); }
+    if (event.key === "Escape") { event.preventDefault(); if (!practiceEscape()) closeGoldfish(); }
     if (event.key === "Tab") {
       const buttons = [...ui.goldfishDialog.querySelectorAll("button:not(:disabled), input:not(:disabled), select:not(:disabled)")]
         .filter(node => !node.closest("[hidden]"));
