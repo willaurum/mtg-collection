@@ -280,7 +280,8 @@ seven cards (or all available cards in smaller decks).
 Drag cards from your hand or any open zone onto the battlefield. Cards stay at
 their exact dropped positions, can overlap, and can be moved freely. Ctrl-click
 adds cards to a selection; dragging empty battlefield selects an area. Drag a
-selected group to move it together. Double-click a battlefield card to tap it;
+selected group to move it together. Right-click a card for its actions (or actions
+for the selected group). Double-click a battlefield card to tap it;
 double-click a card elsewhere to put it on the battlefield. Hover for a readable
 preview. Click zone headings to browse cards; the library has a name filter.
 Drop on zone panels or the hand to move cards; library drops go on top. Use the

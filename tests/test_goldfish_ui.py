@@ -123,6 +123,43 @@ def main():
         assert page.locator('#goldfishHand').bounding_box()['y'] < 720
         assert page.locator('#practiceBattlefield').bounding_box()['width'] == page.locator('#practiceFieldScroll').evaluate('n => n.clientWidth')
         page.screenshot(path=str(Path(tempfile.gettempdir()) / 'mtg-tabletop-desktop.png'))
+        # Right-click selects the target and exposes the same card actions.
+        target = game('zones.battlefield[0]')
+        target_node = page.locator(f'#practiceBattlefield [data-card="{target}"]')
+        target_node.click(button='right')
+        menu = page.locator('#practiceContextMenu')
+        assert menu.is_visible()
+        menu.locator('[data-card-action="tap"]').click()
+        assert game(f'cards["{target}"].tapped')
+        assert menu.count() == 0
+        assert target_node.evaluate('n => getComputedStyle(n).backgroundColor') == 'rgba(0, 0, 0, 0)'
+        assert target_node.evaluate('n => getComputedStyle(n).boxShadow') == 'none'
+        target_node.click(button='right')
+        menu.locator('[id$="CounterName"]').fill('Charge')
+        menu.locator('[data-card-action="counter"][data-delta="1"]').click()
+        assert game(f'cards["{target}"].namedCounters.Charge') == 1
+        target_node.click(button='right')
+        page.keyboard.press('Escape')
+        assert menu.count() == 0
+        assert page.locator('#goldfishDialog').is_visible()
+        target_node.click(button='right')
+        page.locator('#goldfishTitle').click()
+        assert menu.count() == 0
+        # Existing multiselection is retained when right-clicking a member.
+        extra = game('zones.hand[0]')
+        page.locator(f'#goldfishHand [data-card="{extra}"]').click(modifiers=['Control'])
+        target_node.click(button='right')
+        assert page.evaluate('practiceSelected.size') == 2
+        menu.locator('[id$="Destination"]').select_option('graveyard')
+        menu.locator('[data-card-action="move"]').click()
+        assert target in game('zones.graveyard') and extra in game('zones.graveyard')
+        # Keep menus inside the viewport even near its lower-right corner.
+        other = page.locator('#goldfishHand [data-card]').first
+        other.evaluate("n => n.dispatchEvent(new MouseEvent('contextmenu', {bubbles:true, clientX:1278, clientY:718}))")
+        rect = menu.bounding_box()
+        assert rect['x'] + rect['width'] <= 1280
+        assert rect['y'] + rect['height'] <= 720
+        page.keyboard.press('Escape')
         assert not errors, errors
         browser.close()
         print('Desktop tabletop interaction checks passed.')

@@ -6,6 +6,7 @@ let practiceWired = false;
 let practiceDrag = null;
 
 function startPractice(deck) {
+  practiceCloseContext();
   practiceSession = { game: Goldfish.create(deck), history: [] };
   practiceSelected.clear();
   practiceZone = null;
@@ -29,17 +30,7 @@ function startPractice(deck) {
     el("practiceBrowserClose").onclick = () => { practiceZone = null; renderPracticeBrowser(); };
     el("practiceSearch").oninput = renderPracticeBrowser;
     el("practiceCardActions").addEventListener("click", event => {
-      const button = event.target.closest("[data-card-action]");
-      if (!button) return;
-      const action = { type: button.dataset.cardAction };
-      if (action.type === "counter") {
-        action.delta = Number(button.dataset.delta);
-        action.name = el("practiceCounterName").value.trim();
-      }
-      if (action.type === "move") {
-        [action.zone, action.position] = el("practiceDestination").value.split(":");
-      }
-      practiceForSelection(action);
+      practiceHandleCardAction(event, el("practiceCardActions"));
     });
     el("practiceLifeDown").onclick = () => practiceAction({ type: "life", delta: -1 });
     el("practiceLifeUp").onclick = () => practiceAction({ type: "life", delta: 1 });
@@ -49,6 +40,19 @@ function startPractice(deck) {
       el("practiceTokenName").value = "";
     };
     const dialog = el("goldfishDialog");
+    dialog.addEventListener("contextmenu", event => {
+      const node = event.target.closest("[data-card]");
+      if (!node) return;
+      event.preventDefault();
+      practiceOpenContext(node, event.clientX, event.clientY);
+    });
+    document.addEventListener("pointerdown", event => {
+      if (!event.target.closest("#practiceContextMenu")) practiceCloseContext();
+    }, true);
+    window.addEventListener("resize", () => practiceCloseContext());
+    dialog.addEventListener("scroll", event => {
+      if (!event.target.closest("#practiceContextMenu")) practiceCloseContext();
+    }, true);
     dialog.addEventListener("pointerdown", practicePointerDown);
     document.addEventListener("pointermove", practicePointerMove);
     document.addEventListener("pointerup", practicePointerUp);
@@ -98,12 +102,14 @@ function startPractice(deck) {
 }
 
 function stopPractice() {
+  practiceCloseContext();
   practiceCancelDrag();
   practiceSession = null;
   practiceSelected.clear();
 }
 
 function practiceEscape() {
+  if (el("practiceContextMenu")) { practiceCloseContext(true); return true; }
   if (practiceDrag) { practiceCancelDrag(); return true; }
   if (practiceZone) { practiceZone = null; renderPracticeBrowser(); return true; }
   return false;
@@ -115,6 +121,7 @@ function practiceForSelection(action) {
 
 function practiceAction(action) {
   if (!practiceSession) return;
+  practiceCloseContext();
   if (action.type === "undo") {
     if (practiceSession.history.length) practiceSession.game = practiceSession.history.pop();
   } else {
@@ -199,7 +206,7 @@ function practicePreview(id) {
   if (!item) return;
   const art = item.faceDown ? null : imageUrl(item.card, item.face);
   const face = item.card.card_faces?.[item.face] || item.card;
-  el("practicePreview").innerHTML = `${art ? `<img src="/img?u=${encodeURIComponent(art)}" alt="">` : ""}<strong>${escapeHtml(item.faceDown ? "Face-down card" : face.name || item.card.name || "Card")}</strong><p class="sub">${escapeHtml(item.faceDown ? "" : face.oracle_text || "")}</p>`;
+  el("practicePreview").innerHTML = `${art ? `<img src="/img?u=${encodeURIComponent(art)}" alt="">` : ""}<strong>${escapeHtml(item.faceDown ? "Face-down card" : face.name || item.card.name || "Card")}</strong>`;
 }
 
 function practicePointerDown(event) {
@@ -293,4 +300,55 @@ function practiceCancelDrag() {
   practiceDrag?.marquee?.remove();
   practiceDrag = null;
   document.querySelectorAll(".practice-drop-active").forEach(n => n.classList.remove("practice-drop-active"));
+}
+
+// Reuse the sidebar controls so both entry points offer identical actions.
+function practiceHandleCardAction(event, container) {
+  const button = event.target.closest("[data-card-action]");
+  if (!button) return;
+  const action = { type: button.dataset.cardAction };
+  if (action.type === "counter") {
+    action.delta = Number(button.dataset.delta);
+    action.name = container.querySelector('[id$="CounterName"]').value.trim();
+  }
+  if (action.type === "move") {
+    [action.zone, action.position] = container.querySelector('[id$="Destination"]').value.split(":");
+  }
+  practiceForSelection(action);
+}
+
+function practiceCloseContext(restoreFocus = false) {
+  const menu = el("practiceContextMenu");
+  if (!menu) return;
+  const id = menu.dataset.sourceCard;
+  menu.remove();
+  if (restoreFocus) el("goldfishDialog").querySelector(`[data-card="${id}"]`)?.focus();
+}
+
+function practiceOpenContext(node, x, y) {
+  practiceCloseContext();
+  practiceCancelDrag();
+  const id = node.dataset.card;
+  if (!practiceSelected.has(id)) practiceSelected = new Set([id]);
+  practiceUpdateSelection();
+  practicePreview(id);
+  const menu = el("practiceCardActions").cloneNode(true);
+  menu.id = "practiceContextMenu";
+  menu.className = "practice-context-menu";
+  menu.dataset.sourceCard = id;
+  menu.setAttribute("role", "dialog");
+  menu.setAttribute("aria-label", "Card actions");
+  menu.querySelectorAll("[id]").forEach(child => { child.id = `context-${child.id}`; });
+  menu.querySelector('[id$="Destination"]').value = el("practiceDestination").value;
+  menu.addEventListener("click", event => practiceHandleCardAction(event, menu));
+  menu.addEventListener("keydown", event => {
+    if (event.key === "Escape") {
+      event.preventDefault(); event.stopPropagation(); practiceCloseContext(true);
+    }
+  });
+  el("goldfishDialog").append(menu);
+  const rect = menu.getBoundingClientRect();
+  menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - rect.width - 8))}px`;
+  menu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - rect.height - 8))}px`;
+  menu.querySelector("select").focus({ preventScroll: true });
 }

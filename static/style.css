@@ -765,14 +765,15 @@ kbd {
 .practice-battlefield { position: relative; min-width: 100%; min-height: 100%; user-select: none; }
 .practice-field-label { position: absolute; left: 18px; top: 12px; color: var(--faint); letter-spacing: 2px; font-size: 11px; pointer-events: none; }
 .practice-field-label small { margin-left: 12px; letter-spacing: 0; }
-.practice-card { display: block; position: relative; flex: 0 0 104px; width: 104px; height: 145px; padding: 0; border: 2px solid transparent; border-radius: 7px; background: var(--elevate); color: var(--text); cursor: grab; text-align: center; user-select: none; touch-action: none; }
+.practice-card { display: block; position: relative; flex: 0 0 104px; width: 104px; height: 145px; padding: 0; border: 2px solid transparent; border-radius: 7px; background: transparent; color: var(--text); cursor: grab; text-align: center; user-select: none; touch-action: none; }
 .practice-card-art { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; border-radius: 5px; background: var(--elevate); transition: transform .12s; overflow: hidden; }
 .practice-card-art > span { padding: 8px; overflow-wrap: anywhere; }
 .practice-card img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 .practice-battlefield > .practice-card { position: absolute; width: 112px; height: 156px; }
 .practice-card.tapped .practice-card-art { transform: rotate(90deg); }
-.practice-card.selected { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold-soft); }
-.practice-card:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+.practice-card.selected .practice-card-art { outline: 2px solid var(--gold); box-shadow: 0 0 0 4px var(--gold-soft); }
+.practice-card:focus-visible { outline: none; }
+.practice-card:focus-visible .practice-card-art { outline: 2px solid var(--gold); outline-offset: 3px; }
 .practice-counter-badge { position: absolute; bottom: 3px; left: 0; right: 0; background: var(--brown); border: 1px solid var(--gold); color: var(--text); font-size: 11px; padding: 2px; overflow-wrap: anywhere; pointer-events: none; }
 .practice-token-badge { position: absolute; top: 2px; right: 2px; background: var(--surface); color: var(--gold); font-size: 10px; padding: 1px 4px; pointer-events: none; }
 .face-down { background: repeating-linear-gradient(45deg, var(--brown), var(--brown) 8px, var(--brown-hi) 8px, var(--brown-hi) 9px); border: 4px solid var(--bronze); color: var(--gold); padding: 8px; }
@@ -780,7 +781,6 @@ kbd {
 .practice-preview { min-height: 100px; margin-bottom: 12px; }
 .practice-preview img { display: block; width: 100%; max-height: 280px; object-fit: contain; margin-bottom: 8px; }
 .practice-preview strong { display: block; }
-.practice-preview p { white-space: pre-line; max-height: 115px; overflow-y: auto; }
 .practice-inspector .mini-input, .practice-inspector select { width: 100%; }
 .practice-inspector .btn { font-size: 11px; }
 .practice-hand-zone { grid-column: 2; border-top: 1px solid var(--line-2); padding-top: 6px; min-width: 0; }
@@ -1562,3 +1562,7 @@ kbd {
 
 .whoami .who { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .whoami .who b { color: var(--text); font-weight: 600; }
+
+.practice-context-menu { position: fixed; z-index: 1000; width: 260px; max-height: calc(100dvh - 16px); overflow-y: auto; padding: 12px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--surface); box-shadow: 0 8px 24px #0008; }
+.practice-context-menu .mini-input, .practice-context-menu select { width: 100%; }
+.practice-context-menu .btn { font-size: 12px; }
