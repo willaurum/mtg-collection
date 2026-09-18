@@ -116,6 +116,22 @@ def random_card():
     return _get_json("%s/cards/random" % API)
 
 
+@functools.lru_cache(maxsize=128)
+def search_tokens(query="", page=1):
+    """One page of token artwork, using the shared throttled API client."""
+    params = urllib.parse.urlencode({
+        "q": "t:token" + (" (" + query.strip() + ")" if query.strip() else ""),
+        "include_extras": "true", "unique": "art", "order": "name", "page": page,
+    })
+    try:
+        result = _get_json(API + "/cards/search?" + params)
+    except ScryfallError as exc:
+        if exc.status == 404:
+            return {"data": [], "has_more": False}
+        raise
+    return {"data": result.get("data", []), "has_more": bool(result.get("has_more"))}
+
+
 def autocomplete(partial):
     """Up to 20 card names starting with `partial`; never raises."""
     if not partial.strip():

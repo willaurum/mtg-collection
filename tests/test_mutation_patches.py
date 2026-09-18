@@ -60,6 +60,17 @@ class MutationPatchTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.get_data(as_text=True))
         return response.get_json()
 
+    def test_token_search_route(self):
+        with patch("scryfall.search_tokens", return_value={"data": [{"name": "Treasure"}], "has_more": False}) as search:
+            response = self.client.get("/api/tokens?q=Treasure&page=2")
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.get_json()["data"][0]["name"], "Treasure")
+            search.assert_called_once_with("Treasure", 2)
+        self.assertEqual(self.client.get("/api/tokens?page=0").status_code, 400)
+        with patch("scryfall.search_tokens", side_effect=scryfall.ScryfallError("Offline")):
+            self.assertEqual(self.client.get("/api/tokens?q=Treasure").status_code, 502)
+        self.assertEqual(app.test_client().get("/api/tokens").status_code, 401)
+
     def test_card_mutation_only_returns_that_card(self):
         first = self.post("/api/collection/add", {"card": card("bolt", "Lightning Bolt")})
         self.assertEqual([entry["id"] for entry in first["entries"]], ["bolt"])

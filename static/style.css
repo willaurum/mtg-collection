@@ -1566,3 +1566,12 @@ kbd {
 .practice-context-menu { position: fixed; z-index: 1000; width: 260px; max-height: calc(100dvh - 16px); overflow-y: auto; padding: 12px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--surface); box-shadow: 0 8px 24px #0008; }
 .practice-context-menu .mini-input, .practice-context-menu select { width: 100%; }
 .practice-context-menu .btn { font-size: 12px; }
+
+.practice-token-picker { top: 12px; bottom: 12px; max-height: none; }
+#practiceTokenQuery { flex: 1; min-width: 180px; }
+#practiceTokenResults { display: grid; grid-template-columns: repeat(auto-fill, minmax(125px, 1fr)); gap: 12px; margin-top: 12px; }
+.practice-token-result { padding: 6px; color: var(--text); background: var(--elevate); border: 1px solid var(--line-2); border-radius: var(--r-sm); cursor: pointer; }
+.practice-token-result:hover, .practice-token-result:focus-visible { border-color: var(--gold); }
+.practice-token-result img { width: 100%; border-radius: 6px; }
+.practice-token-result span, .practice-token-result small { display: block; margin-top: 4px; }
+.practice-token-result small { color: var(--dim); }

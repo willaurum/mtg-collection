@@ -290,8 +290,14 @@ selected-card Move control to put cards on the library bottom.
 The side controls support tapping, flipping double-faced cards, turning cards
 face down, generic or named counters, token copies, and named custom tokens.
 Moving between zones clears tapping, counters, and face state; rearranging the
-battlefield preserves them. Tokens are removed manually. There is no mana or
-rules enforcement.
+battlefield preserves them. Tokens disappear automatically when they leave the
+battlefield; Undo restores them. Right-click empty battlefield for token
+creation, draw, untap, next turn, and
+shuffle. **Find token art** searches Scryfall tokens; select the artwork to place
+it on the field (at the right-click location when opened there). Search by name
+or filters such as `Soldier pow:1 tou:1`; Previous/Next browse artwork pages.
+**Create custom token** still makes a named placeholder without a network request.
+There is no mana or rules enforcement.
 
 **Next turn** untaps the battlefield and draws one card. Draw, shuffle, untap,
 life adjustment, and mulligans are also available separately. Mulligans shuffle

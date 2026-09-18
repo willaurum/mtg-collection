@@ -94,3 +94,21 @@ const fresh = G.create(deck, () => .5);
 assert.equal(fresh.zones.battlefield.length, 0);
 assert.equal(fresh.turn, 1);
 console.log('Tabletop positioning, group actions, counters, copies, and fresh-game checks passed.');
+
+for (const zone of G.zones.filter(zone => zone !== 'battlefield')) {
+  const seeded = G.act(fresh, {type:'token', card:{name:'Soldier', image_uris:{normal:'token-art'}}, x:200, y:100});
+  const tokenId = seeded.zones.battlefield.at(-1);
+  assert.equal(seeded.cards[tokenId].card.image_uris.normal, 'token-art');
+  assert.equal(seeded.cards[tokenId].x, 200);
+  const removed = G.act(seeded, {type:'move', id:tokenId, zone});
+  assert.equal(removed.cards[tokenId], undefined);
+  assert.ok(!Object.values(removed.zones).flat().includes(tokenId));
+  assert.ok(seeded.cards[tokenId], 'Undo snapshot retains the token');
+  invariant(removed);
+  const repositioned = G.act(seeded, {type:'move', id:tokenId, zone:'battlefield', x:250, y:120});
+  assert.equal(repositioned.cards[tokenId].x, 250);
+}
+const copyRemoved = G.act(copied, {type:'move', id:copy.id, zone:'exile'});
+assert.equal(copyRemoved.cards[copy.id], undefined);
+invariant(copyRemoved);
+console.log('Token art, placement, and removal on every battlefield exit passed.');

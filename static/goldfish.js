@@ -62,6 +62,11 @@
         const from = zones.find(z => next.zones[z].includes(action.id));
         if (from === action.zone && action.zone !== "library" && action.zone !== "battlefield") return game;
         next.zones[from] = next.zones[from].filter(id => id !== action.id);
+        if (card.token && from === "battlefield" && action.zone !== "battlefield") {
+          delete next.cards[action.id];
+          next.message = "Token left the battlefield and was removed.";
+          break;
+        }
         if (from !== action.zone) {
           card.tapped = false; card.counters = 0; card.face = 0;
           card.namedCounters = {}; card.faceDown = false;
@@ -106,11 +111,12 @@
         next.message = `Turn ${next.turn}: untapped and drew ${draw(next, 1)}. Resolve upkeep and other effects manually.`;
         break;
       case "token": {
-        const name = String(action.name || "Token").trim().slice(0, 80) || "Token";
+        const name = String(action.card?.name || action.name || "Token").trim().slice(0, 80) || "Token";
         const id = String(next.nextId++);
-        next.cards[id] = { id, card: { name, type_line: "Token" }, token: true,
+        next.cards[id] = { id, card: action.card ? clone(action.card) : { name, type_line: "Token" }, token: true,
           tapped: false, counters: 0, face: 0, proxy: false,
-          x: 40 + (next.zones.battlefield.length % 8) * 35, y: 40 };
+          x: Number.isFinite(action.x) ? Math.max(0, action.x) : 40 + (next.zones.battlefield.length % 8) * 35,
+          y: Number.isFinite(action.y) ? Math.max(0, action.y) : 40 };
         next.zones.battlefield.push(id); next.message = `Created ${name}.`; break;
       }
       case "copy": {

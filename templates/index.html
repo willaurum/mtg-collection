@@ -550,12 +550,24 @@
         </div>
         <form id="practiceTokenForm" class="practice-toolbar">
           <input id="practiceTokenName" class="mini-input" maxlength="80" placeholder="e.g. 1/1 Soldier" aria-label="Token name">
-          <button class="btn" type="submit">Create token</button>
+          <button class="btn" type="submit">Find token art</button>
+          <button class="btn" type="button" id="practiceCustomToken">Create custom token</button>
         </form>
       </aside>
       <section class="practice-hand-zone" data-drop-zone="hand">
         <strong>HAND <span id="practiceHandCount"></span></strong>
         <div class="goldfish-hand" id="goldfishHand"></div>
+      </section>
+      <section class="practice-zone-browser practice-token-picker" id="practiceTokenPicker" aria-label="Choose a token" hidden>
+        <form class="practice-toolbar" id="practiceTokenSearchForm">
+          <strong>Choose a token</strong>
+          <input class="mini-input" id="practiceTokenQuery" maxlength="200" placeholder="Soldier, Treasure, or Soldier pow:1 tou:1" aria-label="Search Scryfall tokens">
+          <button class="btn" type="submit">Search</button>
+          <button class="btn" type="button" id="practiceTokenClose">Close</button>
+        </form>
+        <p class="sub" id="practiceTokenStatus" role="status"></p>
+        <div id="practiceTokenResults"></div>
+        <div class="practice-toolbar"><button class="btn" id="practiceTokenPrev">Previous</button><span id="practiceTokenPage"></span><button class="btn" id="practiceTokenNext">Next</button></div>
       </section>
       <section class="practice-zone-browser" id="practiceZoneBrowser" hidden>
         <div class="practice-toolbar"><strong id="practiceBrowserTitle"></strong><input class="mini-input" id="practiceSearch" placeholder="Filter cards…" aria-label="Filter zone cards"><button class="btn" id="practiceBrowserClose">Close zone</button></div>

@@ -4,6 +4,7 @@ Uses real template, CSS, and tester JS with an isolated deck; no server or accou
 """
 from pathlib import Path
 import tempfile
+import base64
 
 def main():
     from playwright.sync_api import sync_playwright
@@ -16,12 +17,13 @@ def main():
         page = browser.new_page(viewport={"width": 1440, "height": 1000})
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
-        page.set_content(html)
+        page.route('**/img?*', lambda route: route.fulfill(content_type='image/png', body=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWQAAAABJRU5ErkJggg==')))
+        page.set_content('<base href="http://tabletop.test/">' + html)
         page.add_style_tag(content=(ROOT / "static/style.css").read_text(encoding="utf-8"))
         page.add_script_tag(content="""
           const el = id => document.getElementById(id);
           const escapeHtml = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-          const imageUrl = () => null;
+          const imageUrl = card => card.image_uris?.normal || null;
           const deck = {id: 1, name: 'Tabletop test', commander_id: 'commander', cards: [
             {card_id:'commander', zone:'main', quantity:1, card:{name:'Commander'}},
             {card_id:'card', zone:'main', quantity:30, card:{name:'Test card', card_faces:[{name:'Front'}, {name:'Back'}]}}
@@ -95,7 +97,7 @@ def main():
         page.locator('#practiceTokenName').press('d')
         assert game('zones.hand.length') == count
         page.locator('#practiceTokenName').fill('1/1 Soldier')
-        page.locator('#practiceTokenForm button').click()
+        page.locator('#practiceCustomToken').click()
         token = game('zones.battlefield.at(-1)')
         assert game(f'cards["{token}"].token')
         page.locator('[data-practice="untap"]').focus()
@@ -160,6 +162,32 @@ def main():
         assert rect['x'] + rect['width'] <= 1280
         assert rect['y'] + rect['height'] <= 720
         page.keyboard.press('Escape')
+        # Battlefield menu and asynchronous Scryfall token picker.
+        page.evaluate("""window.getJson = async () => ({data:[{name:'Soldier', power:'1', toughness:'1', image_uris:{normal:'https://cards.scryfall.io/token.jpg'}}], has_more:false})""")
+        field = page.locator('#practiceBattlefield').bounding_box()
+        page.mouse.click(field['x'] + 300, field['y'] + 80, button='right')
+        page.locator('[data-field-action="token"]').click()
+        page.locator('[data-token-index="0"]').wait_for()
+        page.locator('[data-token-index="0"]').click()
+        token = game('zones.battlefield.at(-1)')
+        page.wait_for_function("id => { const img = document.querySelector('#practiceBattlefield [data-card=\"' + id + '\"] img'); return img && img.complete && img.naturalWidth > 0; }", arg=token)
+        assert game(f'cards["{token}"].card.image_uris.normal') == 'https://cards.scryfall.io/token.jpg'
+        assert game(f'cards["{token}"].x') == 300
+        assert game(f'cards["{token}"].y') == 80
+        page.locator(f'#practiceBattlefield [data-card="{token}"]').click(button='right')
+        page.locator('#practiceContextMenu [id$="Destination"]').select_option('hand')
+        page.locator('#practiceContextMenu [data-card-action="move"]').click()
+        assert page.evaluate(f'practiceSession.game.cards["{token}"] === undefined')
+        page.locator('#practiceUndo').click()
+        assert game(f'cards["{token}"].token')
+        # Network failure is visible and closing invalidates late responses.
+        page.evaluate("window.getJson = async () => { throw new Error('Offline'); }; practiceOpenTokens()")
+        page.wait_for_function("document.getElementById('practiceTokenStatus').textContent.includes('Offline')")
+        page.evaluate("window.getJson = () => new Promise(resolve => window.finishTokenSearch = resolve); void practiceSearchTokens(1)")
+        page.locator('#practiceTokenClose').click()
+        page.evaluate("finishTokenSearch({data:[{name:'Late token'}],has_more:false})")
+        assert page.locator('#practiceTokenPicker').is_hidden()
+        assert page.evaluate('practiceTokenResults.length') == 0
         assert not errors, errors
         browser.close()
         print('Desktop tabletop interaction checks passed.')

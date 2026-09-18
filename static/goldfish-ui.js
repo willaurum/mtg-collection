@@ -4,9 +4,15 @@ let practiceSelected = new Set();
 let practiceZone = null;
 let practiceWired = false;
 let practiceDrag = null;
+let practiceTokenRequest = 0;
+let practiceTokenResults = [];
+let practiceTokenPage = 1;
+let practiceTokenQuery = "";
+let practiceTokenPosition = null;
 
 function startPractice(deck) {
   practiceCloseContext();
+  practiceCloseTokens();
   practiceSession = { game: Goldfish.create(deck), history: [] };
   practiceSelected.clear();
   practiceZone = null;
@@ -23,6 +29,7 @@ function startPractice(deck) {
     el("practiceZones").addEventListener("click", event => {
       const button = event.target.closest("[data-zone]");
       if (!button) return;
+      practiceCloseTokens();
       practiceZone = practiceZone === button.dataset.zone ? null : button.dataset.zone;
       el("practiceSearch").value = "";
       renderPracticeBrowser();
@@ -36,15 +43,34 @@ function startPractice(deck) {
     el("practiceLifeUp").onclick = () => practiceAction({ type: "life", delta: 1 });
     el("practiceTokenForm").onsubmit = event => {
       event.preventDefault();
+      practiceOpenTokens();
+    };
+    el("practiceCustomToken").onclick = () => {
       practiceAction({ type: "token", name: el("practiceTokenName").value });
       el("practiceTokenName").value = "";
+    };
+    el("practiceTokenClose").onclick = practiceCloseTokens;
+    el("practiceTokenSearchForm").onsubmit = event => {
+      event.preventDefault(); practiceSearchTokens(1);
+    };
+    el("practiceTokenPrev").onclick = () => practiceSearchTokens(practiceTokenPage - 1);
+    el("practiceTokenNext").onclick = () => practiceSearchTokens(practiceTokenPage + 1);
+    el("practiceTokenResults").onclick = event => {
+      const button = event.target.closest("[data-token-index]");
+      if (!button) return;
+      const card = practiceTokenResults[Number(button.dataset.tokenIndex)];
+      if (!card) return;
+      practiceAction({ type: "token", card, ...practiceTokenPosition });
+      practiceCloseTokens();
     };
     const dialog = el("goldfishDialog");
     dialog.addEventListener("contextmenu", event => {
       const node = event.target.closest("[data-card]");
-      if (!node) return;
-      event.preventDefault();
-      practiceOpenContext(node, event.clientX, event.clientY);
+      if (node) {
+        event.preventDefault(); practiceOpenContext(node, event.clientX, event.clientY);
+      } else if (event.target.closest("#practiceBattlefield")) {
+        event.preventDefault(); practiceOpenFieldContext(event.clientX, event.clientY);
+      }
     });
     document.addEventListener("pointerdown", event => {
       if (!event.target.closest("#practiceContextMenu")) practiceCloseContext();
@@ -102,6 +128,7 @@ function startPractice(deck) {
 }
 
 function stopPractice() {
+  practiceCloseTokens();
   practiceCloseContext();
   practiceCancelDrag();
   practiceSession = null;
@@ -110,6 +137,7 @@ function stopPractice() {
 
 function practiceEscape() {
   if (el("practiceContextMenu")) { practiceCloseContext(true); return true; }
+  if (!el("practiceTokenPicker").hidden) { practiceCloseTokens(); return true; }
   if (practiceDrag) { practiceCancelDrag(); return true; }
   if (practiceZone) { practiceZone = null; renderPracticeBrowser(); return true; }
   return false;
@@ -130,6 +158,7 @@ function practiceAction(action) {
       if (!window.confirm("Start a fresh practice game?")) return;
       const deck = deckById(state.deckId);
       if (!deck) return;
+      practiceCloseTokens();
       next = Goldfish.create(deck);
       practiceSelected.clear();
       practiceZone = null;
@@ -351,4 +380,79 @@ function practiceOpenContext(node, x, y) {
   menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - rect.width - 8))}px`;
   menu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - rect.height - 8))}px`;
   menu.querySelector("select").focus({ preventScroll: true });
+}
+
+function practiceOpenFieldContext(x, y) {
+  practiceCloseContext();
+  practiceCancelDrag();
+  const field = el("practiceBattlefield").getBoundingClientRect();
+  const position = { x: Math.max(0, x - field.left), y: Math.max(0, y - field.top) };
+  const menu = document.createElement("div");
+  menu.id = "practiceContextMenu";
+  menu.className = "practice-context-menu";
+  menu.setAttribute("role", "dialog");
+  menu.setAttribute("aria-label", "Battlefield actions");
+  menu.innerHTML = '<strong>Battlefield</strong><div class="practice-toolbar"><button class="btn" data-field-action="token">Create token…</button><button class="btn" data-field-action="draw">Draw</button><button class="btn" data-field-action="untap">Untap all</button><button class="btn" data-field-action="turn">Next turn</button><button class="btn" data-field-action="shuffle">Shuffle library</button></div>';
+  menu.onclick = event => {
+    const button = event.target.closest("[data-field-action]");
+    if (!button) return;
+    if (button.dataset.fieldAction === "token") practiceOpenTokens(position);
+    else practiceAction({ type: button.dataset.fieldAction });
+  };
+  menu.onkeydown = event => {
+    if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); practiceCloseContext(); }
+  };
+  el("goldfishDialog").append(menu);
+  const rect = menu.getBoundingClientRect();
+  menu.style.left = `${Math.max(8, Math.min(x, innerWidth - rect.width - 8))}px`;
+  menu.style.top = `${Math.max(8, Math.min(y, innerHeight - rect.height - 8))}px`;
+  menu.querySelector("button").focus({ preventScroll: true });
+}
+
+function practiceCloseTokens() {
+  practiceTokenRequest++;
+  practiceTokenResults = [];
+  practiceTokenPosition = null;
+  el("practiceTokenPicker").hidden = true;
+}
+
+function practiceOpenTokens(position = null) {
+  practiceCloseContext();
+  practiceZone = null;
+  renderPracticeBrowser();
+  practiceTokenPosition = position;
+  el("practiceTokenPicker").hidden = false;
+  el("practiceTokenQuery").value = el("practiceTokenName").value;
+  el("practiceTokenQuery").focus();
+  practiceSearchTokens(1);
+}
+
+async function practiceSearchTokens(page) {
+  const request = ++practiceTokenRequest;
+  const session = practiceSession;
+  if (page === 1) practiceTokenQuery = el("practiceTokenQuery").value.trim();
+  practiceTokenResults = [];
+  el("practiceTokenResults").innerHTML = "";
+  el("practiceTokenStatus").textContent = "Searching Scryfall…";
+  el("practiceTokenPrev").disabled = true;
+  el("practiceTokenNext").disabled = true;
+  el("practiceTokenPage").textContent = "";
+  try {
+    const data = await getJson(`/api/tokens?q=${encodeURIComponent(practiceTokenQuery)}&page=${page}`);
+    if (request !== practiceTokenRequest || session !== practiceSession) return;
+    practiceTokenResults = data.data || [];
+    practiceTokenPage = page;
+    el("practiceTokenStatus").textContent = practiceTokenResults.length ? "Click a token to place it on the battlefield. Artwork from Scryfall." : "No tokens found. Try a name like Soldier or Treasure, or use Create custom token in the sidebar.";
+    el("practiceTokenResults").innerHTML = practiceTokenResults.map((card, index) => {
+      const art = imageUrl(card, 0);
+      const stats = card.power != null ? ` · ${card.power}/${card.toughness}` : "";
+      return `<button type="button" class="practice-token-result" data-token-index="${index}">${art ? `<img loading="lazy" src="/img?u=${encodeURIComponent(art)}" alt="${escapeHtml(card.name)}">` : ""}<span>${escapeHtml(card.name + stats)}</span><small>${escapeHtml(card.set_name || "")}</small></button>`;
+    }).join("");
+    el("practiceTokenPage").textContent = `Page ${page}`;
+    el("practiceTokenPrev").disabled = page <= 1;
+    el("practiceTokenNext").disabled = !data.has_more;
+  } catch (error) {
+    if (request !== practiceTokenRequest || session !== practiceSession) return;
+    el("practiceTokenStatus").textContent = `Token search failed: ${error.message}. Retry Search or create a custom token.`;
+  }
 }
