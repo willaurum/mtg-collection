@@ -780,7 +780,7 @@ function renderWishlist() {
       <div class="wishlist-sources">${sources.join("")}</div>
     </figure>`;
   }).join("");
-  wireTiles(ui.wishlistGrid, (id) => openCardById(id));
+  wireTiles(ui.wishlistGrid, (id) => openWishlistDetail(id));
   ui.wishlistGrid.querySelectorAll("[data-wish-drop]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -953,7 +953,7 @@ function setCollectionSort() {
 }
 
 function showCardPreview(cardOrId, anchor) {
-  const entry = typeof cardOrId === "string" ? state.entryById.get(cardOrId) : null;
+  const entry = typeof cardOrId === "string" ? cardRecordById(cardOrId) : null;
   const card = entry ? (entry.card || {}) : (cardOrId || {});
   if (!Object.keys(card).length) return;
   const art = imageUrl(card, 0);
@@ -1283,6 +1283,38 @@ function wireTiles(root, onOpen) {
 
 function openCardById(cardId) {
   openCollectionDetail(cardId);
+}
+
+function cardRecordById(cardId) {
+  return state.entryById.get(cardId) ||
+    (state.library.wishlist || []).find((item) => item.id === cardId);
+}
+
+function openWishlistDetail(cardId) {
+  const item = (state.library.wishlist || []).find((wish) => wish.id === cardId);
+  if (!item) return;
+  hideCardPreview();
+  const sources = [];
+  if (item.manual_quantity) {
+    sources.push(`${item.manual_quantity} manual wish${item.manual_quantity === 1 ? "" : "es"}`);
+  }
+  if (item.proxy_quantity) {
+    sources.push(`${item.proxy_quantity} deck prox${item.proxy_quantity === 1 ? "y" : "ies"}`);
+  }
+  detailBase(item.card || {}, "Wishlist card",
+    `${item.quantity} needed${sources.length ? ` · ${sources.join(" · ")}` : ""}`);
+  ui.detailActions.innerHTML = item.manual_quantity
+    ? '<button class="btn" data-detail-remove-wish>Remove one wish</button>'
+    : '<p class="sub">This card is needed by a deck proxy. Open that deck to change it.</p>';
+  const removeButton = ui.detailActions.querySelector("[data-detail-remove-wish]");
+  if (removeButton) {
+    removeButton.addEventListener("click", async () => {
+      removeButton.disabled = true;
+      const result = await removeFromWishlist(cardId);
+      if (result && removeButton.isConnected) closeCardDetail();
+      else removeButton.disabled = false;
+    });
+  }
 }
 
 /* ------------------------------------------------------------- decking */
