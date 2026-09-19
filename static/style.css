@@ -1127,8 +1127,13 @@ kbd {
   transition: transform 0.13s, box-shadow 0.13s, border-color 0.13s;
 }
 
-.stack-card.proxy { border-color: rgba(214, 180, 117, .88); opacity: .58; filter: saturate(.48); }
-.stack-card.proxy:hover { opacity: .86; filter: saturate(.7); border-color: var(--gold); }
+.stack-card.proxy {
+  border: 3px solid var(--gold);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .45), 0 0 0 1px rgba(214, 180, 117, .3);
+}
+.stack-card.proxy img { filter: grayscale(.72) saturate(.2); }
+.stack-card.proxy:hover { border-color: #f4e2be; }
+.stack-card.proxy:hover img { filter: grayscale(.58) saturate(.3); }
 .proxy-mark { position: absolute; z-index: 4; left: 6px; bottom: 7px; padding: 2px 6px; border: 1px solid rgba(214, 180, 117, .7); border-radius: 999px; background: rgba(23, 18, 9, .88); color: #f4e2be; font: 700 calc(9px * var(--text-scale, 1)) var(--sans); letter-spacing: .08em; text-transform: uppercase; }
 
 .stack-card + .stack-card { margin-top: var(--overlap); }
