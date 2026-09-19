@@ -18,15 +18,20 @@
     return drawn;
   }
   function create(deck, random = Math.random) {
-    const game = { name: deck.name, life: deck.commander_id ? 40 : 20, turn: 1,
-      mulligans: 0, nextId: 0, cards: {}, zones: Object.fromEntries(zones.map(z => [z, []])),
+    const leaders = new Set([deck.commander_id, deck.partner_id].filter(Boolean));
+    const gameZones = [...zones];
+    if (deck.companion_id) gameZones.push("companion");
+    const game = { name: deck.name, life: leaders.size ? 40 : 20, turn: 1,
+      mulligans: 0, nextId: 0, cards: {}, zones: Object.fromEntries(gameZones.map(z => [z, []])),
       message: "Opening hand drawn. Resolve card rules manually." };
-    for (const line of deck.cards.filter(line => line.zone === "main")) {
+    for (const line of deck.cards.filter(line => line.zone === "main" || line.card_id === deck.companion_id)) {
       for (let i = 0; i < line.quantity; i++) {
         const id = String(game.nextId++);
         game.cards[id] = { id, card: clone(line.card || {}), proxy: !!line.proxy,
           tapped: false, counters: 0, face: 0, token: false };
-        game.zones[line.card_id === deck.commander_id ? "command" : "library"].push(id);
+        const zone = leaders.has(line.card_id) ? "command"
+          : line.card_id === deck.companion_id ? "companion" : "library";
+        game.zones[zone].push(id);
       }
     }
     shuffle(game.zones.library, random);
@@ -58,8 +63,10 @@
         next.message = `Mulligan ${next.mulligans}: drew ${draw(next, 7)}. Move cards to library bottom manually as your mulligan rules require.`;
         break;
       case "move": {
-        if (!card || !zones.includes(action.zone)) return game;
-        const from = zones.find(z => next.zones[z].includes(action.id));
+        const activeZones = Object.keys(next.zones);
+        if (!card || !activeZones.includes(action.zone)) return game;
+        const from = activeZones.find(z => next.zones[z].includes(action.id));
+        if (!from) return game;
         if (from === action.zone && action.zone !== "library" && action.zone !== "battlefield") return game;
         next.zones[from] = next.zones[from].filter(id => id !== action.id);
         if (card.token && from === "battlefield" && action.zone !== "battlefield") {
@@ -128,7 +135,7 @@
       }
       case "removeToken":
         if (!card || !card.token) return game;
-        zones.forEach(z => { next.zones[z] = next.zones[z].filter(id => id !== action.id); });
+        Object.keys(next.zones).forEach(z => { next.zones[z] = next.zones[z].filter(id => id !== action.id); });
         delete next.cards[action.id]; next.message = "Token removed."; break;
       default: return game;
     }

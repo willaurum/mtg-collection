@@ -11,6 +11,7 @@ assert.equal(game.life, 40);
 assert.equal(game.zones.hand.length, 7);
 assert.equal(game.zones.library.length, 3);
 assert.equal(game.zones.command.length, 1);
+assert.equal(Object.hasOwn(game.zones, 'companion'), false);
 assert.equal(Object.keys(game.cards).length, 11);
 assert.equal(JSON.stringify(deck), original);
 function invariant(state) {
@@ -58,6 +59,22 @@ assert.equal(G.act(empty, {type: 'draw'}).zones.hand.length, 0);
 assert.equal(G.act(empty, {type: 'mulligan'}).zones.hand.length, 0);
 assert.equal(G.act(game, {type: 'move', id, zone: 'invalid'}), game);
 console.log('Manual simulator engine checks passed.');
+
+const roles = G.create({name: 'Roles', commander_id: 'c1', partner_id: 'c2', companion_id: 'side', cards: [
+  {card_id: 'c1', zone: 'main', quantity: 1, card: {name: 'Commander'}},
+  {card_id: 'c2', zone: 'main', quantity: 1, card: {name: 'Partner'}},
+  {card_id: 'main', zone: 'main', quantity: 8, card: {name: 'Deck card'}},
+  {card_id: 'side', zone: 'maybeboard', quantity: 1, card: {name: 'Companion'}},
+  {card_id: 'maybe', zone: 'maybeboard', quantity: 1, card: {name: 'Other maybeboard'}},
+]}, () => .5);
+assert.equal(roles.life, 40);
+assert.equal(roles.zones.command.length, 2);
+assert.equal(roles.zones.companion.length, 1);
+assert.equal(roles.zones.library.length, 1);
+assert.equal(Object.values(roles.cards).find(item => item.id === roles.zones.companion[0]).card.name, 'Companion');
+const companionOnField = G.act(roles, {type: 'move', id: roles.zones.companion[0], zone: 'battlefield'});
+assert.equal(companionOnField.zones.companion.length, 0);
+assert.equal(companionOnField.zones.battlefield.length, 1);
 
 // A group move is one immutable transaction and preserves battlefield state.
 let table = G.create(deck, () => .5);

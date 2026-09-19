@@ -23,7 +23,7 @@ import db
 MAX_NAME = 60
 DEFAULT_DECK_NAME = "New deck"
 PROFILE_FORMAT = "mtg-card-viewer-profile"
-PROFILE_VERSION = 3
+PROFILE_VERSION = 4
 
 
 class StoreError(Exception):
@@ -404,18 +404,46 @@ def delete_deck(user_id, deck_id):
     return released
 
 
-def set_commander(user_id, deck_id, card_id):
+DECK_ROLE_COLUMNS = {
+    "commander": ("commander_id", "main"),
+    "partner": ("partner_id", "main"),
+    "companion": ("companion_id", "maybeboard"),
+}
+
+
+def set_deck_role(user_id, deck_id, card_id, role="commander"):
+    if role not in DECK_ROLE_COLUMNS:
+        raise StoreError("Choose commander, partner, or companion.")
+    column, expected_zone = DECK_ROLE_COLUMNS[role]
     with db.transaction() as conn:
-        _owned_deck(conn, user_id, deck_id)
+        deck = _owned_deck(conn, user_id, deck_id)
         if card_id:
             held = conn.execute(
-                "SELECT 1 FROM deck_cards WHERE deck_id = ? AND card_id = ? AND zone = 'main'",
-                (deck_id, card_id)).fetchone()
+                "SELECT zone FROM deck_cards WHERE deck_id = ? AND card_id = ?",
+                (deck_id, card_id),
+            ).fetchone()
             if not held:
-                raise StoreError("Add the card to the deck before making it the commander.")
-        conn.execute("UPDATE decks SET commander_id = ?, updated = ? WHERE id = ?",
-                     (card_id or None, _now(), deck_id))
+                raise StoreError("Add the card to the deck before assigning that role.")
+            if held["zone"] != expected_zone:
+                destination = "main deck" if expected_zone == "main" else "maybeboard"
+                raise StoreError(f"Move the card to the {destination} before assigning that role.")
+        # A printing can occupy only one special slot at a time. The role
+        # choice itself is intentionally permissive: partner compatibility
+        # and companion deck-building conditions are left to the player.
+        values = {key: deck[key] for key, _zone in DECK_ROLE_COLUMNS.values()}
+        if card_id:
+            values = {key: None if value == card_id else value
+                      for key, value in values.items()}
+        values[column] = card_id or None
+        conn.execute(
+            "UPDATE decks SET commander_id = ?, partner_id = ?, companion_id = ?, updated = ? WHERE id = ?",
+            (values["commander_id"], values["partner_id"], values["companion_id"], _now(), deck_id),
+        )
     return deck_id
+
+
+def set_commander(user_id, deck_id, card_id):
+    return set_deck_role(user_id, deck_id, card_id, "commander")
 
 
 def _allocations(conn, user_id):
@@ -557,8 +585,12 @@ def change_deck_printing(user_id, deck_id, card_id, card):
             """INSERT INTO deck_cards (deck_id, card_id, quantity, zone, proxy) VALUES (?, ?, ?, ?, ?)
                ON CONFLICT (deck_id, card_id) DO UPDATE SET quantity = quantity + excluded.quantity""",
             (deck_id, new_id, quantity, line["zone"], line["proxy"]))
-        conn.execute("UPDATE decks SET commander_id = ?, updated = ? WHERE id = ?",
-                     (new_id if deck["commander_id"] == card_id else deck["commander_id"], _now(), deck_id))
+        role_ids = [new_id if deck[key] == card_id else deck[key]
+                    for key in ("commander_id", "partner_id", "companion_id")]
+        conn.execute(
+            "UPDATE decks SET commander_id = ?, partner_id = ?, companion_id = ?, updated = ? WHERE id = ?",
+            (*role_ids, _now(), deck_id),
+        )
     return deck_id
 
 
@@ -578,8 +610,14 @@ def deck_remove(user_id, deck_id, card_id, drop_all=False):
         else:
             conn.execute("DELETE FROM deck_cards WHERE deck_id = ? AND card_id = ?",
                          (deck_id, card_id))
-            if deck["commander_id"] == card_id:
-                conn.execute("UPDATE decks SET commander_id = NULL WHERE id = ?", (deck_id,))
+            conn.execute(
+                """UPDATE decks SET
+                     commander_id = CASE WHEN commander_id = ? THEN NULL ELSE commander_id END,
+                     partner_id = CASE WHEN partner_id = ? THEN NULL ELSE partner_id END,
+                     companion_id = CASE WHEN companion_id = ? THEN NULL ELSE companion_id END
+                   WHERE id = ?""",
+                (card_id, card_id, card_id, deck_id),
+            )
         conn.execute("UPDATE decks SET updated = ? WHERE id = ?", (_now(), deck_id))
     return deck_id
 
@@ -645,9 +683,15 @@ def set_proxy(user_id, deck_id, card_id, proxy):
                        DO UPDATE SET quantity = quantity + excluded.quantity""",
                     (deck_id, replacement_id, line["quantity"], line["zone"]),
                 )
-                if deck["commander_id"] == card_id:
-                    conn.execute("UPDATE decks SET commander_id = ? WHERE id = ?",
-                                 (replacement_id, deck_id))
+                conn.execute(
+                    """UPDATE decks SET
+                         commander_id = CASE WHEN commander_id = ? THEN ? ELSE commander_id END,
+                         partner_id = CASE WHEN partner_id = ? THEN ? ELSE partner_id END,
+                         companion_id = CASE WHEN companion_id = ? THEN ? ELSE companion_id END
+                       WHERE id = ?""",
+                    (card_id, replacement_id, card_id, replacement_id,
+                     card_id, replacement_id, deck_id),
+                )
             else:
                 conn.execute("UPDATE deck_cards SET proxy = 0 WHERE deck_id = ? AND card_id = ?",
                              (deck_id, card_id))
@@ -682,8 +726,16 @@ def move_deck_card(user_id, deck_id, card_id, zone):
                 raise StoreError("You do not have enough free copies to move this into the main deck.")
         conn.execute("UPDATE deck_cards SET zone = ? WHERE deck_id = ? AND card_id = ?",
                      (zone, deck_id, card_id))
-        if zone == "maybeboard" and deck["commander_id"] == card_id:
-            conn.execute("UPDATE decks SET commander_id = NULL WHERE id = ?", (deck_id,))
+        if zone == "maybeboard":
+            conn.execute(
+                """UPDATE decks SET
+                     commander_id = CASE WHEN commander_id = ? THEN NULL ELSE commander_id END,
+                     partner_id = CASE WHEN partner_id = ? THEN NULL ELSE partner_id END
+                   WHERE id = ?""",
+                (card_id, card_id, deck_id),
+            )
+        elif deck["companion_id"] == card_id:
+            conn.execute("UPDATE decks SET companion_id = NULL WHERE id = ?", (deck_id,))
         conn.execute("UPDATE decks SET updated = ? WHERE id = ?", (_now(), deck_id))
     return deck_id
 
@@ -823,7 +875,8 @@ def deck_state(user_id, deck_id, conn=None):
     return {
         "id": row["id"], "name": row["name"], "created": row["created"],
         "updated": row["updated"], "category": row["category"],
-        "commander_id": row["commander_id"],
+        "commander_id": row["commander_id"], "partner_id": row["partner_id"],
+        "companion_id": row["companion_id"],
         "cards": lines,
         "count": sum(line["quantity"] for line in lines if line["zone"] == "main"),
         "maybeboard_count": sum(line["quantity"] for line in lines if line["zone"] == "maybeboard"),
@@ -916,6 +969,8 @@ def export_profile(user_id):
                 "name": deck["name"],
                 "category": deck["category"],
                 "commander_id": deck["commander_id"],
+                "partner_id": deck["partner_id"],
+                "companion_id": deck["companion_id"],
                 "cards": deck["cards"],
             }
             for deck in snapshot["decks"]
@@ -942,7 +997,7 @@ def import_profile(user_id, profile, mode="merge"):
     """
     if not isinstance(profile, dict):
         raise StoreError("That file is not a profile backup.")
-    if profile.get("format") != PROFILE_FORMAT or profile.get("version") not in (1, 2, PROFILE_VERSION):
+    if profile.get("format") != PROFILE_FORMAT or profile.get("version") not in (1, 2, 3, PROFILE_VERSION):
         raise StoreError("That profile is from an unsupported version of MTG Card Viewer.")
     if mode not in ("merge", "replace"):
         raise StoreError("Choose whether to add to or replace your collection.")
@@ -1006,7 +1061,7 @@ def import_profile(user_id, profile, mode="merge"):
                 (deck_id, user_id, _clean_name(source_deck.get("name")),
                  _clean_category(source_deck.get("category")), now, now),
             )
-            held_ids = set()
+            card_zones = {}
             for line in source_deck["cards"]:
                 card_id = line.get("card_id") if isinstance(line, dict) else None
                 quantity = _profile_quantity(line.get("quantity")) if isinstance(line, dict) else 0
@@ -1048,11 +1103,23 @@ def import_profile(user_id, profile, mode="merge"):
                         "quantity": quantity,
                     })
                 if zone == "main":
-                    held_ids.add(card_id)
+                    card_zones[card_id] = zone
+                else:
+                    card_zones[card_id] = zone
 
             commander_id = source_deck.get("commander_id")
-            if commander_id in held_ids:
-                conn.execute("UPDATE decks SET commander_id = ? WHERE id = ?",
-                             (commander_id, deck_id))
+            partner_id = source_deck.get("partner_id")
+            companion_id = source_deck.get("companion_id")
+            commander_id = commander_id if card_zones.get(commander_id) == "main" else None
+            partner_id = partner_id if card_zones.get(partner_id) == "main" else None
+            companion_id = companion_id if card_zones.get(companion_id) == "maybeboard" else None
+            if partner_id == commander_id:
+                partner_id = None
+            if companion_id in (commander_id, partner_id):
+                companion_id = None
+            conn.execute(
+                "UPDATE decks SET commander_id = ?, partner_id = ?, companion_id = ? WHERE id = ?",
+                (commander_id, partner_id, companion_id, deck_id),
+            )
             report["decks"] += 1
     return report

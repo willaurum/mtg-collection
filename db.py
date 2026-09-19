@@ -17,7 +17,7 @@ import sqlite3
 import sys
 import threading
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 SCHEMA = """
 CREATE TABLE users (
@@ -218,6 +218,15 @@ def migrate(conn=None):
                )"""
         )
         current = 7
+    if current < 8:
+        # Commander decks may have a second command-zone leader and one
+        # optional companion outside the 100-card main deck.
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(decks)")}
+        if "partner_id" not in columns:
+            conn.execute("ALTER TABLE decks ADD COLUMN partner_id TEXT")
+        if "companion_id" not in columns:
+            conn.execute("ALTER TABLE decks ADD COLUMN companion_id TEXT")
+        current = 8
     # Later versions add their steps here, guarded by `current < N`.
     conn.execute(
         "INSERT INTO meta (key, value) VALUES ('schema_version', ?) "

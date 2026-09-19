@@ -266,7 +266,7 @@ gutting your list. Deleting a deck hands its copies straight back.
 | Make a deck | **+** beside *Decks* in the rail — the heading doubles as its name field |
 | Add cards | Click any card under **Free to add**, or use **Add to deck** on a card |
 | Change counts | Hover a card for its **− N +** stepper; **+** greys out at your last free copy |
-| Set the commander | Hover a legendary creature in the deck and click **★** |
+| Set deck roles | Use **★** for the primary commander, or open a card for partner and companion controls |
 | See where a card is | Chips under each collection tile: *2 free*, *Mono Red Burn ×2* — click a deck chip to jump there |
 | Delete a deck | **Delete deck**, then click again to confirm |
 
@@ -323,8 +323,14 @@ starts as. Two orderings matter and they differ:
 
 Commander decks get a **Commander** column pinned first. Any legendary creature
 in the deck (or anything whose text says it *can be your commander*) shows a
-star on hover; the header counts toward 100. Take the commander out of the deck
-and the slot clears itself.
+star on hover for the primary commander. Open a card to assign it as the
+primary commander or partner commander. The two command-zone cards share a
+combined colour identity and count toward the 100-card deck. Partner pairing
+rules are intentionally not validated.
+
+A card with the Companion keyword can be assigned from the maybeboard. It gets
+its own **Companion** column and stays outside the 100-card count. Companion
+deck-building conditions are intentionally left to the player.
 
 ### Rule checking
 

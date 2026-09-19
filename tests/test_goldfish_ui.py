@@ -34,6 +34,8 @@ def main():
         for name in ["goldfish.js", "goldfish-ui.js"]:
             page.add_script_tag(content=(ROOT / "static" / name).read_text(encoding="utf-8"))
         page.evaluate("el('goldfishDialog').hidden = false; startPractice(deck)")
+        assert page.locator('[data-drop-zone="companion"]').count() == 0
+        assert page.locator('#practiceCompanionOption').evaluate('node => node.hidden')
         def game(expression):
             return page.evaluate("(() => { const {cards, zones} = practiceSession.game; return practiceSession.game." + expression + "; })()")
         def drag(selector, x, y):
@@ -188,6 +190,11 @@ def main():
         page.evaluate("finishTokenSearch({data:[{name:'Late token'}],has_more:false})")
         assert page.locator('#practiceTokenPicker').is_hidden()
         assert page.evaluate('practiceTokenResults.length') == 0
+        # The companion slot is created only for decks that assigned one.
+        page.evaluate("""deck.companion_id = 'companion'; deck.cards.push({card_id:'companion', zone:'maybeboard', quantity:1, card:{name:'Companion'}}); startPractice(deck)""")
+        assert page.locator('[data-drop-zone="companion"]').count() == 1
+        assert not page.locator('#practiceCompanionOption').evaluate('node => node.hidden')
+        assert game('zones.companion.length') == 1
         assert not errors, errors
         browser.close()
         print('Desktop tabletop interaction checks passed.')

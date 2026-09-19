@@ -450,8 +450,9 @@ def api_deck_delete():
 @auth.api_login_required
 def api_deck_commander():
     payload = request.get_json(silent=True) or {}
-    return _store_call(lambda: store.set_commander(
-        auth.user_id(), payload.get("deck_id"), payload.get("card_id")),
+    return _store_call(lambda: store.set_deck_role(
+        auth.user_id(), payload.get("deck_id"), payload.get("card_id"),
+        payload.get("role", "commander")),
         lambda deck_id: {"deck_ids": [deck_id], "deck_id": deck_id})
 
 

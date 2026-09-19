@@ -1241,10 +1241,20 @@ function openDeckDetail(deckId, cardId) {
     `${line.quantity} in ${line.zone === "maybeboard" ? "maybeboard" : "main deck"}`);
   const destination = line.zone === "main" ? "maybeboard" : "main";
   const destinationLabel = destination === "main" ? "Move to main deck" : "Move to maybeboard";
+  const roleButtons = [];
+  if (line.zone === "main" && canBeCommander(card)) {
+    roleButtons.push(["commander", deck.commander_id === cardId, "commander"]);
+    roleButtons.push(["partner", deck.partner_id === cardId, "partner commander"]);
+  }
+  if (line.zone === "maybeboard" && canBeCompanion(card)) {
+    roleButtons.push(["companion", deck.companion_id === cardId, "companion"]);
+  }
   ui.detailActions.innerHTML = `
     <button class="btn${line.proxy ? " primary" : ""}" data-detail-proxy>
       ${line.proxy ? "Use owned copy" : "Mark as proxy"}</button>
     <button class="btn" data-detail-move>${destinationLabel}</button>
+    ${roleButtons.map(([role, active, label]) =>
+      `<button class="btn${active ? " primary" : ""}" data-detail-role="${role}">${active ? `Clear ${label}` : `Make ${label}`}</button>`).join("")}
     <button class="btn quiet danger" data-detail-remove>Remove one</button>`;
   ui.detailActions.querySelector("[data-detail-proxy]").addEventListener("click", () => {
     mutate("/api/decks/proxy", { deck_id: deckId, card_id: cardId, proxy: !line.proxy },
@@ -1255,6 +1265,17 @@ function openDeckDetail(deckId, cardId) {
     mutate("/api/decks/move", { deck_id: deckId, card_id: cardId, zone: destination },
       () => `Moved to ${destination === "main" ? "the main deck" : "the maybeboard"}.`);
     closeCardDetail();
+  });
+  ui.detailActions.querySelectorAll("[data-detail-role]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const role = button.dataset.detailRole;
+      const current = role === "commander" ? deck.commander_id
+        : role === "partner" ? deck.partner_id : deck.companion_id;
+      mutate("/api/decks/commander", {
+        deck_id: deckId, card_id: current === cardId ? null : cardId, role,
+      }, () => current === cardId ? `${role} cleared.` : `${lineName(line)} set as ${role}.`);
+      closeCardDetail();
+    });
   });
   ui.detailActions.querySelector("[data-detail-remove]").addEventListener("click", () => {
     mutate("/api/decks/remove", { deck_id: deckId, card_id: cardId }, () => "Removed one copy.");
@@ -1406,8 +1427,9 @@ const deckById = (id) => (state.library.decks || []).find((d) => d.id === id);
 const deckName = (id) => (deckById(id) || {}).name || "the deck";
 
 function deckCoverHtml(deck) {
-  const commanderLine = deck.commander_id
-    ? deck.cards.find((line) => line.card_id === deck.commander_id)
+  const leaderId = deck.commander_id || deck.partner_id;
+  const commanderLine = leaderId
+    ? deck.cards.find((line) => line.card_id === leaderId)
     : null;
   const coverLine = commanderLine || deck.cards.find((line) => line.zone === "main");
   if (!coverLine) {
@@ -1454,6 +1476,7 @@ function renderDeckList() {
 /* Columns are grouped by card type, the way Archidekt lays a deck out. */
 const CATEGORIES = [
   { key: "commander", label: "Commander" },
+  { key: "companion", label: "Companion" },
   { key: "creature", label: "Creatures" },
   { key: "planeswalker", label: "Planeswalkers" },
   { key: "instant", label: "Instants" },
@@ -1491,6 +1514,10 @@ function canBeCommander(card) {
   const text = (front.oracle_text || card.oracle_text || "").toLowerCase();
   if (text.includes("can be your commander")) return true;
   return line.includes("legendary") && line.includes("creature");
+}
+
+function canBeCompanion(card) {
+  return allOracle(card).includes("companion —");
 }
 
 /* ------------------------------------------------ commander legality */
@@ -1567,10 +1594,12 @@ function deckProblems(deck) {
       note(id, `${seen.total} copies of ${name} — Commander allows ${allowed}`));
   });
 
-  const commanderLine = deck.cards.find((line) => line.card_id === deck.commander_id);
-  const commander = commanderLine ? { name: lineName(commanderLine), card: lineCard(commanderLine) } : null;
-  const identity = commander
-    ? new Set((commander.card || {}).color_identity || []) : null;
+  const leaders = [deck.commander_id, deck.partner_id].filter(Boolean)
+    .map((id) => deck.cards.find((line) => line.card_id === id)).filter(Boolean);
+  const identity = leaders.length
+    ? new Set(leaders.flatMap((line) => lineCard(line).color_identity || [])) : null;
+  const leaderIds = new Set(leaders.map((line) => line.card_id));
+  const leaderNames = leaders.map(lineName).join(" and ");
 
   deck.cards.filter((line) => line.zone === "main").forEach((line) => {
     const card = lineCard(line);
@@ -1583,13 +1612,13 @@ function deckProblems(deck) {
 
     // Colour identity only means something once there is a commander, and the
     // commander can never breach the identity it defines.
-    if (!identity || line.card_id === deck.commander_id) return;
+    if (!identity || leaderIds.has(line.card_id)) return;
     const outside = (card.color_identity || [])
       .filter((colour) => !identity.has(colour));
     if (outside.length) {
       note(line.card_id,
         `${lineName(line)} is ${identityLabel(outside)} — outside ` +
-        `${commander.name}'s ${identityLabel([...identity])} identity`);
+        `${leaderNames}'s ${identityLabel([...identity])} identity`);
     }
   });
   return problems;
@@ -1612,8 +1641,9 @@ function renderDeckPanel() {
   deck.cards.forEach((line) => {
     const entry = state.entryById.get(line.card_id);
     const card = lineCard(line);
-    const key = line.zone === "maybeboard" ? "maybeboard"
-      : line.card_id === deck.commander_id ? "commander" : cardCategory(card);
+    const key = line.card_id === deck.companion_id ? "companion"
+      : line.card_id === deck.commander_id || line.card_id === deck.partner_id ? "commander"
+      : line.zone === "maybeboard" ? "maybeboard" : cardCategory(card);
     groups.get(key).push({ line, entry, card });
   });
   ui.deckEmpty.hidden = deck.cards.length > 0;
@@ -1705,12 +1735,15 @@ async function refreshAllPrices() {
 function renderDeckSummary(deck) {
   const unique = deck.cards.length;
   const commanderLine = deck.cards.find((line) => line.card_id === deck.commander_id);
-  const commander = commanderLine ? { name: lineName(commanderLine) } : null;
+  const partnerLine = deck.cards.find((line) => line.card_id === deck.partner_id);
+  const companionLine = deck.cards.find((line) => line.card_id === deck.companion_id);
+  const leaders = [commanderLine, partnerLine].filter(Boolean).map(lineName);
   const parts = [`${deck.count} / 100 cards`, `${unique} unique`];
-  parts.push(commander ? `led by ${commander.name}` : "no commander set");
+  parts.push(leaders.length ? `led by ${leaders.join(" and ")}` : "no commander set");
+  if (companionLine) parts.push(`companion ${lineName(companionLine)}`);
   if (deck.maybeboard_count) parts.push(`${deck.maybeboard_count} in maybeboard`);
   ui.deckSummary.textContent = parts.join(" · ");
-  ui.deckSummary.classList.toggle("ok", deck.count === 100 && Boolean(commander));
+  ui.deckSummary.classList.toggle("ok", deck.count === 100 && leaders.length > 0);
   ui.deckPrice.textContent = `Deck price ${money(deck.value)}`;
   renderUnownedPrice(deck);
   ui.deckPrice.title = deck.maybeboard_count
@@ -1734,18 +1767,21 @@ function renderDeckSummary(deck) {
 function stackCardHtml({ line, entry, card }, deck) {
   const id = escapeHtml(line.card_id);
   const isCommander = line.card_id === deck.commander_id;
+  const isPartner = line.card_id === deck.partner_id;
+  const isCompanion = line.card_id === deck.companion_id;
 
   const art = imageUrl(card, 0);
   const lead = canBeCommander(card);
   const broken = state.problems.get(line.card_id) || [];
   const tip = [lineName(line), ...broken.map((reason) => "⚠ " + reason)].join("\n");
   return `
-    <div class="stack-card${isCommander ? " is-commander" : ""}${broken.length ? " illegal" : ""}${line.proxy ? " proxy" : ""}"
+    <div class="stack-card${isCommander || isPartner ? " is-commander" : ""}${isCompanion ? " is-companion" : ""}${broken.length ? " illegal" : ""}${line.proxy ? " proxy" : ""}"
          data-id="${id}" title="${escapeHtml(tip)}">
       ${broken.length ? '<span class="warn" aria-label="Breaks a deck rule">!</span>' : ""}
       <img src="${art ? `/img?u=${encodeURIComponent(art)}` : ""}"
            alt="${escapeHtml(lineName(line))}" loading="lazy">
       ${line.proxy ? '<span class="proxy-mark">Proxy</span>' : ""}
+      ${isPartner ? '<span class="role-mark">Partner</span>' : isCompanion ? '<span class="role-mark">Companion</span>' : ""}
       ${line.quantity > 1 ? `<span class="qty">×${line.quantity}</span>` : ""}
       ${lead ? `<button class="cmd${isCommander ? " on" : ""}" data-cmd="${id}"
          title="${isCommander ? "Not the commander" : "Make this the commander"}">★</button>` : ""}
@@ -1792,7 +1828,7 @@ function wireDeckCards() {
       event.stopPropagation();
       const deck = deckById(state.deckId);
       const next = deck.commander_id === node.dataset.cmd ? null : node.dataset.cmd;
-      mutate("/api/decks/commander", { deck_id: state.deckId, card_id: next },
+      mutate("/api/decks/commander", { deck_id: state.deckId, card_id: next, role: "commander" },
         () => (next ? `${lineName(deck.cards.find((line) => line.card_id === next))} leads the deck.`
                     : "Commander cleared."));
     });
@@ -1951,14 +1987,17 @@ function exportDeck() {
   const deck = deckById(state.deckId);
   if (!deck) return;
   const main = deck.cards.filter((line) => line.zone === "main");
-  const commander = main.filter((line) => line.card_id === deck.commander_id);
-  const cards = main.filter((line) => line.card_id !== deck.commander_id);
+  const leaderIds = new Set([deck.commander_id, deck.partner_id].filter(Boolean));
+  const commanders = main.filter((line) => leaderIds.has(line.card_id));
+  const cards = main.filter((line) => !leaderIds.has(line.card_id));
   const sortLines = (lines) => [...lines].sort((a, b) => lineName(a).localeCompare(lineName(b)));
   const asLine = (line) => `${line.quantity} ${lineName(line)}`;
   const sections = [`// ${deck.name}`];
-  if (commander.length) sections.push("", "Commander", ...sortLines(commander).map(asLine));
+  if (commanders.length) sections.push("", "Commander", ...sortLines(commanders).map(asLine));
   sections.push("", "Deck", ...sortLines(cards).map(asLine));
-  const maybeboard = deck.cards.filter((line) => line.zone === "maybeboard");
+  const companion = deck.cards.filter((line) => line.card_id === deck.companion_id);
+  if (companion.length) sections.push("", "Companion", ...companion.map(asLine));
+  const maybeboard = deck.cards.filter((line) => line.zone === "maybeboard" && line.card_id !== deck.companion_id);
   if (maybeboard.length) sections.push("", "Maybeboard", ...sortLines(maybeboard).map(asLine));
   openListExport("Copy decklist", sections.join("\n") + "\n",
     "This is ready to paste into the app’s deck importer or another decklist tool.");
@@ -2269,9 +2308,10 @@ function renderDeckStats(deck) {
     return;
   }
   const peak = Math.max(...curve, 1);
-  const commanderLine = deck.cards.find((line) => line.card_id === deck.commander_id);
-  const identity = commanderLine ? (lineCard(commanderLine).color_identity || []) : [];
-  const typeText = CATEGORIES.filter((category) => !["commander", "maybeboard"].includes(category.key))
+  const leaderLines = [deck.commander_id, deck.partner_id].filter(Boolean)
+    .map((id) => deck.cards.find((line) => line.card_id === id)).filter(Boolean);
+  const identity = [...new Set(leaderLines.flatMap((line) => lineCard(line).color_identity || []))];
+  const typeText = CATEGORIES.filter((category) => !["commander", "companion", "maybeboard"].includes(category.key))
     .map((category) => [category.label, types.get(category.key) || 0])
     .filter(([, count]) => count)
     .map(([label, count]) => `<span>${escapeHtml(label)} <b>${count}</b></span>`).join("");

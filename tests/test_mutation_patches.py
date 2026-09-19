@@ -138,6 +138,43 @@ class MutationPatchTests(unittest.TestCase):
         self.assertEqual(result["decks"][0]["cards"][0]["quantity"], 3)
         self.assertEqual(store.deck_state(self.user_id, other)["cards"][0]["card_id"], "old")
 
+    def test_partner_and_companion_roles_round_trip_and_follow_card_changes(self):
+        leader = card("leader", "Leader")
+        partner = card("partner", "Partner")
+        companion = card("companion", "Companion")
+        companion["oracle_text"] = "Companion — Your starting deck meets a condition."
+        for item in (leader, partner, companion):
+            store.add_card(self.user_id, item)
+        deck_id = store.create_deck(self.user_id, "Roles")
+        store.deck_add(self.user_id, deck_id, "leader")
+        store.deck_add(self.user_id, deck_id, "partner")
+        store.deck_add(self.user_id, deck_id, "companion", zone="maybeboard")
+
+        self.post("/api/decks/commander", {
+            "deck_id": deck_id, "card_id": "leader", "role": "commander"})
+        self.post("/api/decks/commander", {
+            "deck_id": deck_id, "card_id": "partner", "role": "partner"})
+        result = self.post("/api/decks/commander", {
+            "deck_id": deck_id, "card_id": "companion", "role": "companion"})
+        deck = result["decks"][0]
+        self.assertEqual(
+            (deck["commander_id"], deck["partner_id"], deck["companion_id"]),
+            ("leader", "partner", "companion"),
+        )
+
+        with self.assertRaisesRegex(store.StoreError, "maybeboard"):
+            store.set_deck_role(self.user_id, deck_id, "leader", "companion")
+        store.move_deck_card(self.user_id, deck_id, "partner", "maybeboard")
+        self.assertIsNone(store.deck_state(self.user_id, deck_id)["partner_id"])
+
+        profile = store.export_profile(self.user_id)
+        other_user = auth.create_user("role-backup-user", "a long test password")
+        store.import_profile(other_user, profile)
+        copied = store.library(other_user)["decks"][0]
+        self.assertEqual(copied["commander_id"], "leader")
+        self.assertIsNone(copied["partner_id"])
+        self.assertEqual(copied["companion_id"], "companion")
+
     def test_printing_change_removes_empty_collection_row(self):
         store.add_card(self.user_id, card("old", "Bolt"))
         deck = store.create_deck(self.user_id)

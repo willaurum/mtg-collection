@@ -20,6 +20,8 @@ function startPractice(deck) {
   el("practiceCounterName").value = "";
   el("practiceTokenName").value = "";
   el("practiceDestination").value = "battlefield";
+  const companionDestination = el("practiceCompanionOption");
+  if (companionDestination) companionDestination.hidden = !deck.companion_id;
   el("practicePreview").innerHTML = '<p class="sub">Hover a card to inspect it.</p>';
   if (!practiceWired) {
     el("practiceControls").addEventListener("click", event => {
@@ -198,7 +200,9 @@ function renderPractice() {
   field.innerHTML = '<span class="practice-field-label">BATTLEFIELD <small>Place your cards anywhere</small></span>' + game.zones.battlefield.map(id => practiceCard(id, true)).join("");
   field.style.width = `${Math.max(500, ...game.zones.battlefield.map(id => (game.cards[id].x || 0) + 190))}px`;
   field.style.height = `${Math.max(240, ...game.zones.battlefield.map(id => (game.cards[id].y || 0) + 210))}px`;
-  el("practiceZones").innerHTML = ["library", "command", "graveyard", "exile"].map(zone => {
+  const visibleZones = ["library", "command",
+    ...(game.zones.companion ? ["companion"] : []), "graveyard", "exile"];
+  el("practiceZones").innerHTML = visibleZones.map(zone => {
     const ids = game.zones[zone];
     const top = zone === "library" ? null : ids.at(-1);
     return `<section class="practice-zone" data-drop-zone="${zone}"><button class="practice-zone-heading" data-zone="${zone}">${zone === "command" ? "Command" : zone[0].toUpperCase() + zone.slice(1)} <b>${ids.length}</b></button>
