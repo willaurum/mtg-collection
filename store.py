@@ -564,9 +564,9 @@ def deck_remove(user_id, deck_id, card_id, drop_all=False):
 
 
 def set_proxy(user_id, deck_id, card_id, proxy):
-    """Mark a deck card as a proxy, or require an owned copy before clearing it."""
+    """Mark a deck card as a proxy, or replace it with an owned printing."""
     with db.transaction() as conn:
-        _owned_deck(conn, user_id, deck_id)
+        deck = _owned_deck(conn, user_id, deck_id)
         line = conn.execute(
             "SELECT quantity, zone FROM deck_cards WHERE deck_id = ? AND card_id = ?",
             (deck_id, card_id),
@@ -574,21 +574,68 @@ def set_proxy(user_id, deck_id, card_id, proxy):
         if not line:
             raise StoreError("That card is no longer in the deck.")
         proxy = bool(proxy)
+        replacement_id = card_id
         if not proxy:
-            owned = conn.execute(
-                "SELECT quantity FROM collection WHERE user_id = ? AND card_id = ?",
+            original = card_json(conn.execute(
+                "SELECT data FROM cards WHERE id = ?", (card_id,)).fetchone())
+            original_oracle = original.get("oracle_id")
+            original_name = (original.get("name") or "").casefold()
+            allocations = _allocations(conn, user_id)
+            candidates = conn.execute(
+                """SELECT c.card_id, c.quantity, k.data
+                     FROM collection c JOIN cards k ON k.id = c.card_id
+                    WHERE c.user_id = ?
+                    ORDER BY CASE WHEN c.card_id = ? THEN 0 ELSE 1 END,
+                             c.added, c.card_id""",
                 (user_id, card_id),
-            ).fetchone()
-            if not owned:
-                raise StoreError("Add this card to your collection before clearing its proxy flag.")
-            if line["zone"] == "main":
-                allocated = sum(item["quantity"] for item in _allocations(conn, user_id).get(card_id, []))
-                if int(owned["quantity"]) - allocated < int(line["quantity"]):
-                    raise StoreError("You do not have enough free copies to use this as a non-proxy.")
-        conn.execute("UPDATE deck_cards SET proxy = ? WHERE deck_id = ? AND card_id = ?",
-                     (1 if proxy else 0, deck_id, card_id))
+            ).fetchall()
+            for candidate in candidates:
+                candidate_card = card_json(candidate)
+                same_card = (candidate_card.get("oracle_id") == original_oracle
+                             if original_oracle else
+                             (candidate_card.get("name") or "").casefold() == original_name)
+                if not same_card:
+                    continue
+                allocated = sum(item["quantity"] for item in
+                                allocations.get(candidate["card_id"], []))
+                if (line["zone"] == "main" and
+                        int(candidate["quantity"]) - allocated < int(line["quantity"])):
+                    continue
+                target = conn.execute(
+                    "SELECT proxy, zone FROM deck_cards WHERE deck_id = ? AND card_id = ?",
+                    (deck_id, candidate["card_id"]),
+                ).fetchone()
+                if target and candidate["card_id"] != card_id and (
+                        target["zone"] != line["zone"] or target["proxy"]):
+                    continue
+                replacement_id = candidate["card_id"]
+                break
+            else:
+                raise StoreError(
+                    "Add an available printing of this card to your collection before using an owned copy.")
+
+            if replacement_id != card_id:
+                conn.execute("DELETE FROM deck_cards WHERE deck_id = ? AND card_id = ?",
+                             (deck_id, card_id))
+                conn.execute(
+                    """INSERT INTO deck_cards (deck_id, card_id, quantity, zone, proxy)
+                       VALUES (?, ?, ?, ?, 0)
+                       ON CONFLICT (deck_id, card_id)
+                       DO UPDATE SET quantity = quantity + excluded.quantity""",
+                    (deck_id, replacement_id, line["quantity"], line["zone"]),
+                )
+                if deck["commander_id"] == card_id:
+                    conn.execute("UPDATE decks SET commander_id = ? WHERE id = ?",
+                                 (replacement_id, deck_id))
+            else:
+                conn.execute("UPDATE deck_cards SET proxy = 0 WHERE deck_id = ? AND card_id = ?",
+                             (deck_id, card_id))
+        else:
+            conn.execute("UPDATE deck_cards SET proxy = 1 WHERE deck_id = ? AND card_id = ?",
+                         (deck_id, card_id))
         conn.execute("UPDATE decks SET updated = ? WHERE id = ?", (_now(), deck_id))
-    return deck_id
+    return {"deck_id": deck_id, "card_id": replacement_id,
+            "previous_card_id": card_id}
 
 
 def move_deck_card(user_id, deck_id, card_id, zone):

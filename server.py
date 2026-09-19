@@ -500,8 +500,8 @@ def api_deck_proxy():
     payload = request.get_json(silent=True) or {}
     return _store_call(lambda: store.set_proxy(
         auth.user_id(), payload.get("deck_id"), payload.get("card_id"), payload.get("proxy")),
-        lambda deck_id: {"entry_ids": [payload.get("card_id")],
-                         "deck_ids": [deck_id], "deck_id": deck_id})
+        lambda result: {"entry_ids": [result["previous_card_id"], result["card_id"]],
+                        "deck_ids": [result["deck_id"]], "deck_id": result["deck_id"]})
 
 
 @app.post("/api/decks/move")

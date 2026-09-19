@@ -157,6 +157,25 @@ class MutationPatchTests(unittest.TestCase):
         self.assertIsNone(store.entry(self.user_id, "new"))
         self.assertTrue(store.deck_state(self.user_id, deck)["cards"][0]["proxy"])
 
+    def test_use_owned_copy_switches_proxy_to_available_collection_printing(self):
+        proxy = card("proxy-print", "Lightning Bolt")
+        proxy["oracle_id"] = "bolt-oracle"
+        owned = card("owned-print", "Lightning Bolt")
+        owned["oracle_id"] = "bolt-oracle"
+        store.add_card(self.user_id, owned)
+        deck = store.create_deck(self.user_id)
+        store.deck_add(self.user_id, deck, card=proxy)
+
+        result = self.post("/api/decks/proxy", {
+            "deck_id": deck, "card_id": proxy["id"], "proxy": False})
+
+        line = result["decks"][0]["cards"][0]
+        self.assertEqual(line["card_id"], owned["id"])
+        self.assertEqual(line["card"]["id"], owned["id"])
+        self.assertFalse(line["proxy"])
+        entry = next(item for item in result["entries"] if item["id"] == owned["id"])
+        self.assertEqual(entry["available"], 0)
+
     def test_printing_change_rejects_conflicts_other_cards_and_other_users(self):
         store.add_card(self.user_id, card("old", "Bolt"))
         deck = store.create_deck(self.user_id)
