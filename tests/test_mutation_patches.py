@@ -50,6 +50,7 @@ class MutationPatchTests(unittest.TestCase):
         with db.transaction() as conn:
             conn.execute("DELETE FROM users")
             conn.execute("DELETE FROM cards")
+            conn.execute("DELETE FROM meta WHERE key LIKE 'cheapest_price:%'")
         self.user_id = auth.create_user("test-user", "a long test password")
         self.client = app.test_client()
         with self.client.session_transaction() as session:
@@ -420,9 +421,54 @@ class MutationPatchTests(unittest.TestCase):
         self.assertTrue(result["prices_refreshed"])
         self.assertFalse(result["prices_stale"])
         self.assertEqual(batch.call_args.args[0], [{"id": "owned"}, {"id": "proxy"}])
-        clear.assert_called_once()
+        clear.assert_not_called()
         cheapest.assert_called_once()
         self.assertEqual(store.price_history(self.user_id)["current"], 12.0)
+
+    def test_rate_limit_stops_price_refresh_and_deck_scans(self):
+        deck_id = store.create_deck(self.user_id, "Prices")
+        for name in ("a", "b", "c"):
+            store.deck_add(self.user_id, deck_id, card=card(name, name), quantity=2)
+        limited = scryfall.ScryfallError("Slow down", status=429)
+        with patch("scryfall.cards_by_identifiers", side_effect=limited), \
+             patch("scryfall.cheapest_printing_usd") as lookup:
+            result = self.post("/api/prices/refresh", {})
+        self.assertTrue(result["rate_limited"])
+        lookup.assert_not_called()
+        with patch("scryfall.cards_by_identifiers", return_value=([], [])), \
+             patch("scryfall.cheapest_printing_usd", side_effect=limited) as lookup:
+            result = self.post("/api/prices/refresh", {})
+        self.assertTrue(result["rate_limited"])
+        lookup.assert_called_once()
+        store.remember_cheapest_price(card("a", "a"), Decimal("1.25"))
+        with patch("scryfall.cheapest_printing_usd") as lookup:
+            result = self.client.get(f"/api/decks/{deck_id}/unowned-price").get_json()
+        lookup.assert_not_called()
+        self.assertEqual(result, {"value": 2.5, "missing_count": 6, "unpriced_count": 4})
+
+    def test_navigation_never_scans_prices_and_lookup_saves_price(self):
+        store.add_card(self.user_id, card("owned", "Owned", "1.00"))
+        deck_id = store.create_deck(self.user_id, "Prices")
+        store.deck_add(self.user_id, deck_id, card=card("missing", "Missing"))
+        with patch("scryfall.urllib.request.urlopen", side_effect=AssertionError("Unexpected network request")):
+            for url in ("/api/library", "/api/prices/history", "/api/prices/refresh",
+                        f"/api/decks/{deck_id}/unowned-price"):
+                self.assertEqual(self.client.get(url).status_code, 200)
+        with patch("scryfall.card_by_name", return_value=card("owned", "Owned", "4.00")):
+            self.assertEqual(self.client.get("/api/card?name=Owned").status_code, 200)
+        self.assertEqual(store.library(self.user_id)["summary"]["value"], 4.0)
+
+    def test_explicit_refresh_saves_estimate_across_connections(self):
+        deck_id = store.create_deck(self.user_id, "Prices")
+        missing = card("missing", "Missing")
+        store.deck_add(self.user_id, deck_id, card=missing)
+        with patch("scryfall.cards_by_identifiers", return_value=([missing], [])), \
+             patch("scryfall.cheapest_printing_usd", return_value=Decimal("0.75")):
+            self.post("/api/prices/refresh", {})
+        db.close()
+        with patch("scryfall.urllib.request.urlopen", side_effect=AssertionError("Unexpected network request")):
+            result = self.client.get(f"/api/decks/{deck_id}/unowned-price").get_json()
+        self.assertEqual(result["value"], 0.75)
 
     def test_force_refresh_reports_partial_and_failed_updates(self):
         store.add_card(self.user_id, card("owned", "Owned Card", "2.00"), quantity=2)
@@ -455,12 +501,13 @@ class MutationPatchTests(unittest.TestCase):
                       "card": card(printing, "Lightning Bolt"), "quantity": quantity})
         self.post("/api/decks/add", {"deck_id": deck_id,
                   "card": card("maybe", "Maybeboard Card"), "zone": "maybeboard"})
-        with patch("scryfall.cheapest_printing_usd", return_value=Decimal("0.17")) as lookup:
+        store.remember_cheapest_price(card("bolt-a", "Lightning Bolt"), Decimal("0.17"))
+        with patch("scryfall.cheapest_printing_usd") as lookup:
             response = self.client.get(f"/api/decks/{deck_id}/unowned-price")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json(),
                          {"value": 0.51, "missing_count": 3, "unpriced_count": 0})
-        lookup.assert_called_once()
+        lookup.assert_not_called()
         store.add_card(self.user_id, card("owned-bolt", "Lightning Bolt"), quantity=3)
         with patch("scryfall.cheapest_printing_usd") as lookup:
             result = self.client.get(f"/api/decks/{deck_id}/unowned-price").get_json()
@@ -472,8 +519,8 @@ class MutationPatchTests(unittest.TestCase):
         for printing in ("a", "b", "c"):
             self.post("/api/decks/add", {"deck_id": deck_id,
                       "card": card(printing, printing), "quantity": 2})
-        with patch("scryfall.cheapest_printing_usd",
-                   side_effect=[Decimal("1.25"), None, scryfall.ScryfallError("Offline")]):
+        store.remember_cheapest_price(card("a", "a"), Decimal("1.25"))
+        with patch("scryfall.cheapest_printing_usd", side_effect=AssertionError("Unexpected price scan")):
             result = self.client.get(f"/api/decks/{deck_id}/unowned-price").get_json()
         self.assertEqual(result, {"value": 2.5, "missing_count": 6, "unpriced_count": 4})
         other = auth.create_user("other-user", "another long password")

@@ -16,7 +16,6 @@ import secrets
 import uuid
 import webbrowser
 from decimal import Decimal
-from concurrent.futures import ThreadPoolExecutor
 
 from flask import (Flask, Response, g, jsonify, redirect, render_template,
                    request, session, url_for)
@@ -162,7 +161,10 @@ def api_clear_images():
 
 def _card_response(fetch):
     try:
-        return jsonify(fetch())
+        card = fetch()
+        with db.transaction() as conn:
+            store.remember_card(card, conn)
+        return jsonify(card)
     except scryfall.ScryfallError as exc:
         return jsonify({"error": str(exc), "suggestions": exc.suggestions}), 404
 
@@ -233,10 +235,13 @@ def _refresh_current_prices(user_id, force=False):
             store.refresh_collection_prices(user_id, cards, complete=not missing)
             refreshed = True
             stale = bool(missing)
-        except (scryfall.ScryfallError, TimeoutError):
+        except (scryfall.ScryfallError, TimeoutError) as exc:
             # A history based on the last cached prices is still more helpful
             # than an error modal when the Pi temporarily has no internet.
             stale = True
+            if getattr(exc, "status", None) == 429:
+                return {"prices_refreshed": False, "prices_stale": True,
+                        "rate_limited": True}
     return {"prices_refreshed": refreshed, "prices_stale": stale}
 
 
@@ -276,16 +281,16 @@ def api_library():
 @auth.api_login_required
 def api_price_history():
     user_id = auth.user_id()
-    refresh = _refresh_current_prices(user_id)
     payload = store.price_history(user_id)
-    payload.update({"refreshed": refresh["prices_refreshed"], "stale": refresh["prices_stale"]})
+    payload.update({"refreshed": False, "stale": True})
     return jsonify(payload)
 
 
 @app.get("/api/prices/refresh")
 @auth.api_login_required
 def api_price_refresh():
-    return _library(**_refresh_current_prices(auth.user_id()))
+    # Older clients used this GET during navigation. Keep it read-only.
+    return _library(prices_refreshed=False, prices_stale=True)
 
 
 @app.post("/api/prices/refresh")
@@ -293,22 +298,22 @@ def api_price_refresh():
 def api_price_force_refresh():
     user_id = auth.user_id()
     refresh = _refresh_current_prices(user_id, force=True)
-    scryfall.clear_cheapest_price_cache()
+    if refresh.get("rate_limited"):
+        return _library(**refresh)
     # Warm every deck's missing-card estimate, including decks not currently open.
     cards = {}
     for deck in store.library(user_id)["decks"]:
         for item in store.unowned_deck_cards(user_id, deck["id"]):
             card = item["card"]
             cards[card.get("oracle_id") or card["name"]] = card
-    def lookup(card):
+    for card in cards.values():
         try:
-            scryfall.cheapest_printing_usd(card)
-            return True
-        except (scryfall.ScryfallError, TimeoutError):
-            return False
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        if not all(list(executor.map(lookup, cards.values()))):
+            store.remember_cheapest_price(card, scryfall.cheapest_printing_usd(card))
+        except (scryfall.ScryfallError, TimeoutError) as exc:
             refresh["prices_stale"] = True
+            if getattr(exc, "status", None) == 429:
+                refresh["rate_limited"] = True
+                break
     return _library(**refresh)
 
 
@@ -391,19 +396,12 @@ def api_deck_unowned_price(deck_id):
         return jsonify(error=str(exc)), 404
     total = Decimal("0")
     unpriced = 0
-    def lookup(item):
-        try:
-            return scryfall.cheapest_printing_usd(item["card"])
-        except (scryfall.ScryfallError, TimeoutError):
-            return None
-    # Keep a large deck's initial lookup responsive. Scryfall's shared
-    # throttle still spaces every request, including pagination requests.
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        for item, price in zip(missing, executor.map(lookup, missing)):
-            if price is None:
-                unpriced += item["quantity"]
-            else:
-                total += price * item["quantity"]
+    for item in missing:
+        price = store.cached_cheapest_price(item["card"])
+        if price is None:
+            unpriced += item["quantity"]
+        else:
+            total += price * item["quantity"]
     return jsonify(value=float(total.quantize(Decimal("0.01"))),
                    missing_count=sum(item["quantity"] for item in missing),
                    unpriced_count=unpriced)

@@ -130,7 +130,6 @@ const state = {
   collectionSort: readPreference("mtg.collection-sort", "name"),
   unusedOnly: readPreference("mtg.collection-unused", "0") === "1",
   collectionFilters: { availability: "all", colors: new Set(), type: "all", rarity: "all" },
-  priceRefreshChecked: false,
   unownedPriceKey: null,
   commandItems: [],
   commandIndex: 0,
@@ -881,7 +880,7 @@ async function openPriceHistory() {
       const difference = (Number(data.current) || 0) - (Number(previous.value) || 0);
       ui.priceHistoryChange.textContent = `${difference >= 0 ? "+" : "−"}${money(Math.abs(difference))} since ${previous.day}.${refreshNote}`;
     } else {
-      ui.priceHistoryChange.textContent = `Tracking starts today; prices refresh once daily when you open this view.${refreshNote}`;
+      ui.priceHistoryChange.textContent = `Tracking starts today. Use Refresh all prices in Settings to update saved prices.${refreshNote}`;
     }
     ui.priceHistoryList.innerHTML = history.map((point) => `
       <li><time datetime="${escapeHtml(point.day)}">${escapeHtml(point.day)}</time><strong>${money(point.value)}</strong></li>`).join("");
@@ -1539,9 +1538,9 @@ async function renderUnownedPrice(deck) {
     if (state.unownedPriceKey !== key) return;
     const partial = data.unpriced_count > 0;
     ui.deckUnownedPrice.textContent = partial && data.unpriced_count === data.missing_count
-      ? "Unowned (cheapest): price unavailable"
+      ? "Unowned (cheapest): use Refresh all prices"
       : `Unowned (cheapest): ${money(data.value)}${partial ? " + unknown" : ""}`;
-    ui.deckUnownedPrice.title += ` ${data.missing_count} missing copies; ${data.unpriced_count} without prices.`;
+    ui.deckUnownedPrice.title += ` Saved estimates. Use Refresh all prices in Settings to update. ${data.missing_count} missing copies; ${data.unpriced_count} without prices.`;
   } catch {
     if (state.unownedPriceKey !== key) return;
     ui.deckUnownedPrice.textContent = "Unowned (cheapest): unavailable";
@@ -1557,14 +1556,15 @@ async function refreshAllPrices() {
   try {
     const library = await getJson("/api/prices/refresh", { method: "POST" });
     state.unownedPriceKey = null;
-    state.priceRefreshChecked = !library.prices_stale;
     applyLibrary(library);
     if (state.card) {
       const fresh = state.entryById.get(state.card.id)?.card ||
         library.decks.flatMap((deck) => deck.cards).find((line) => line.card_id === state.card.id)?.card;
       if (fresh) { state.card = fresh; ui.priceChips.innerHTML = priceChipsHtml(fresh); }
     }
-    ui.settingsPriceStatus.textContent = library.prices_stale
+    ui.settingsPriceStatus.textContent = library.rate_limited
+      ? "Scryfall asked us to slow down. Price updates are paused; please wait before trying again. Saved prices are kept."
+      : library.prices_stale
       ? "Some prices could not be refreshed. Previous values are kept where available; please try again."
       : `All prices refreshed at ${new Date().toLocaleTimeString()}.`;
   } catch (error) {
@@ -1588,7 +1588,7 @@ function renderDeckSummary(deck) {
   renderUnownedPrice(deck);
   ui.deckPrice.title = deck.maybeboard_count
     ? `Main deck ${money(deck.value)} · Maybeboard ${money(deck.maybeboard_value)}`
-    : "Current Scryfall USD market value of the main deck";
+    : "Main deck value from saved Scryfall prices";
 
   const broken = state.problems.size;
   ui.deckLegality.hidden = deck.cards.length === 0;
@@ -1879,18 +1879,6 @@ async function copyDeckExport() {
   setStatus("List copied to the clipboard.");
 }
 
-async function refreshDeckPrices() {
-  if (state.priceRefreshChecked) return;
-  try {
-    const library = await getJson("/api/prices/refresh");
-    state.priceRefreshChecked = true;
-    applyLibrary(library);
-    if (library.prices_stale) setStatus("Could not refresh prices; showing the last cached values.", true);
-  } catch {
-    // Price refresh is additive: opening a deck must still be immediate offline.
-  }
-}
-
 function showDeckMenuView() {
   state.deckId = null;
   state.cardSeq++;
@@ -1906,7 +1894,6 @@ function openDeck(deckId) {
   showView(ui.deckPanel, "deck");   // the deck's own row in the rail lights up
   renderDeckList();
   renderDeckPanel();
-  refreshDeckPrices();
 }
 
 /* -------------------------------------------------------------- import */

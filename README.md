@@ -424,9 +424,25 @@ the card.
 The client follows Scryfall's published guidelines:
 
 - Sends a descriptive `User-Agent` and `Accept` header
-- Leaves at least 150ms between requests (they ask for 50–100ms, and start
-  refusing around ten a second, so this keeps real headroom)
+- Leaves at least 200ms between requests, with one request awaiting response
+  headers at a time
+- Stops immediately on HTTP 429 without automatic retries; all callers fail
+  fast during a minimum 60-second cooldown. Longer `Retry-After` values,
+  including HTTP dates, are honored in full and warnings are logged.
+- Opening decks and price history uses saved prices without API price scans.
+  Card lookups and additions save prices included in their card data. Only
+  **Refresh all prices** scans the collection and missing-card estimates.
+  Cheapest-printing estimates are saved across restarts and stay unchanged
+  until an explicit refresh.
+- Stops remaining price scans after a rate-limit warning and preserves daily
+  cheapest-printing caches when refreshing prices. Concurrent lookups share
+  those cached results instead of repeating the same search.
 - Caches images to disk rather than re-downloading them
+
+Throttling and cooldowns are shared by threads within one process, not across
+separate app instances or computers. Keep the supplied single-worker server
+configuration; instances sharing an outbound IP also share Scryfall's limits.
+Restarting the app resets its in-memory cooldown and price caches.
 
 The page never calls Scryfall directly — everything goes through the local
 Flask app, so the rate limiting and the image cache apply no matter what the UI

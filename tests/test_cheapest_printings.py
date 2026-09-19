@@ -2,6 +2,9 @@
 
 import unittest
 import tempfile
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from decimal import Decimal
 from unittest.mock import patch
@@ -34,6 +37,19 @@ class CheapestPrintingTests(unittest.TestCase):
             self.assertIsNone(scryfall.cheapest_printing_usd({"name": "Unpriced"}))
         with patch("scryfall._get_json", side_effect=scryfall.ScryfallError("Not found", status=404)):
             self.assertIsNone(scryfall.cheapest_printing_usd({"name": "Digital only"}))
+
+    def test_concurrent_cache_misses_share_one_search(self):
+        ready = threading.Barrier(8)
+        def lookup(_):
+            ready.wait(timeout=5)
+            return scryfall.cheapest_printing_usd({"oracle_id": "shared"})
+        def fetch(_):
+            time.sleep(0.05)  # Let the other callers reach the cache miss.
+            return {"data": [{"prices": {"usd": "0.25"}}]}
+        with patch("scryfall._get_json", side_effect=fetch) as get:
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                self.assertEqual(list(pool.map(lookup, range(8))), [Decimal("0.25")] * 8)
+        get.assert_called_once()
 
     def test_network_failure_is_not_cached_as_zero(self):
         with patch("scryfall._get_json", side_effect=[scryfall.ScryfallError("Offline"),

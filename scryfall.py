@@ -11,6 +11,9 @@ import hashlib
 import functools
 from decimal import Decimal, InvalidOperation
 import json
+import logging
+import math
+from email.utils import parsedate_to_datetime
 import os
 import re
 import sys
@@ -27,7 +30,8 @@ IMAGE_PREFIX = "https://cards.scryfall.io/"
 USER_AGENT = "MTGCardViewer/1.0 (desktop card viewer)"
 MIN_INTERVAL = 0.20  # Cap this process at five request starts per second.
 TIMEOUT = 20
-MAX_RATE_LIMIT_RETRIES = 3
+RATE_LIMIT_COOLDOWN = 60.0
+logger = logging.getLogger(__name__)
 
 
 def _cache_root():
@@ -54,6 +58,8 @@ class ScryfallError(Exception):
 
 
 _throttle_lock = threading.Lock()
+_transport_lock = threading.Lock()
+_price_lock = threading.Lock()
 _last_request = 0.0
 _blocked_until = 0.0
 
@@ -64,8 +70,12 @@ def _throttle():
     while True:
         with _throttle_lock:
             now = time.monotonic()
-            wait = max(MIN_INTERVAL - (now - _last_request),
-                       _blocked_until - now)
+            if _blocked_until > now:
+                raise ScryfallError(
+                    "Scryfall requests paused after a rate-limit warning. "
+                    "Try again in %s seconds." % math.ceil(_blocked_until - now),
+                    status=429)
+            wait = MIN_INTERVAL - (now - _last_request)
             if wait <= 0:
                 _last_request = now
                 return
@@ -79,25 +89,32 @@ def _defer_requests(seconds):
         _blocked_until = max(_blocked_until, time.monotonic() + seconds)
 
 
-def _retry_delay(exc, attempt):
-    """Prefer Scryfall's Retry-After value, with bounded fallback backoff."""
+def _retry_delay(exc):
+    """Honor numeric and HTTP-date Retry-After, never shortening the pause."""
+    value = (exc.headers or {}).get("Retry-After")
     try:
-        return max(0.5, min(float(exc.headers.get("Retry-After")), 60.0))
-    except (AttributeError, TypeError, ValueError):
-        return min(2 ** attempt, 30.0)
+        delay = float(value)
+    except (TypeError, ValueError):
+        try:
+            delay = parsedate_to_datetime(value).timestamp() - time.time()
+        except (TypeError, ValueError, OverflowError, AttributeError):
+            delay = RATE_LIMIT_COOLDOWN
+    return max(RATE_LIMIT_COOLDOWN, delay) if math.isfinite(delay) else RATE_LIMIT_COOLDOWN
 
 
 def _urlopen(request):
-    for attempt in range(MAX_RATE_LIMIT_RETRIES + 1):
+    # Serialize admission through receipt of response headers: queued workers
+    # must see a 429 cooldown before any of them sends another request.
+    with _transport_lock:
         _throttle()
         try:
             return urllib.request.urlopen(request, timeout=TIMEOUT)
         except urllib.error.HTTPError as exc:
-            if exc.code != 429 or attempt == MAX_RATE_LIMIT_RETRIES:
-                raise
-            delay = _retry_delay(exc, attempt)
-            exc.close()
-            _defer_requests(delay)
+            if exc.code == 429:
+                delay = _retry_delay(exc)
+                _defer_requests(delay)
+                logger.warning("Scryfall HTTP 429: pausing requests for %.0f seconds; no automatic retry", delay)
+            raise
 
 
 def _open(url, accept):
@@ -240,7 +257,9 @@ def cheapest_printing_usd(card):
     """Lowest paper price across printings/finishes, cached for one UTC day."""
     identity = ("oracleid:" + card["oracle_id"] if card.get("oracle_id")
                 else "!" + json.dumps(card["name"]))
-    return _cheapest_printing_usd(identity, int(time.time() // 86400))
+    # lru_cache alone allows simultaneous misses to repeat the same searches.
+    with _price_lock:
+        return _cheapest_printing_usd(identity, int(time.time() // 86400))
 
 
 def clear_cheapest_price_cache():

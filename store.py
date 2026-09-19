@@ -12,6 +12,7 @@ user's rows without passing their id, which is the point.
 """
 
 from __future__ import annotations
+from decimal import Decimal
 
 import datetime
 import json
@@ -60,6 +61,26 @@ def remember_card(card, conn=None):
          card.get("rarity"), json.dumps(card, ensure_ascii=False), _now()),
     )
     return card_id
+
+
+def _cheapest_price_key(card):
+    identity = "oracle:" + card["oracle_id"] if card.get("oracle_id") else "name:" + card["name"]
+    return "cheapest_price:" + identity
+
+
+def remember_cheapest_price(card, price):
+    """Keep explicit refresh results across restarts, including unpriced cards."""
+    with db.transaction() as conn:
+        conn.execute("INSERT INTO meta (key, value) VALUES (?, ?) "
+                     "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                     (_cheapest_price_key(card), str(price) if price is not None else ""))
+
+
+def cached_cheapest_price(card):
+    """Read the last saved estimate; never fetch or expire it on navigation."""
+    row = db.connect().execute("SELECT value FROM meta WHERE key = ?",
+                               (_cheapest_price_key(card),)).fetchone()
+    return Decimal(row["value"]) if row and row["value"] else None
 
 
 def card_json(row):
