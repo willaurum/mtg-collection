@@ -238,10 +238,20 @@
     <section class="view" id="wishlistPanel" hidden>
       <header class="view-head">
         <div><h1>Wishlist</h1><p class="sub" id="wishlistSummary">Manual wishes and proxies needed by your decks.</p></div>
-        <div class="head-actions"><button class="btn" id="wishlistExportBtn">Export wishlist</button></div>
+        <div class="head-actions">
+          <label class="toolbar-label" for="wishlistSort">Sort</label>
+          <select class="view-select" id="wishlistSort" aria-label="Sort wishlist sections">
+            <option value="name">Name A–Z</option>
+            <option value="mana">Mana value low–high</option>
+            <option value="price">Price high–low</option>
+            <option value="quantity">Quantity high–low</option>
+            <option value="set">Set A–Z</option>
+          </select>
+          <button class="btn" id="wishlistExportBtn">Export wishlist</button>
+        </div>
       </header>
       <div class="view-body">
-        <div class="coll-grid" id="wishlistGrid"></div>
+        <div class="wishlist-groups" id="wishlistGrid"></div>
         <p class="empty" id="wishlistEmpty" hidden>No cards needed yet. Add one from the card viewer or add a proxy to a deck.</p>
       </div>
     </section>

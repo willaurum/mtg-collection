@@ -42,7 +42,7 @@ const ui = {
   wishlistBtn: el("wishlistBtn"), wishlistCount: el("wishlistCount"),
   wishlistPanel: el("wishlistPanel"), wishlistGrid: el("wishlistGrid"),
   wishlistEmpty: el("wishlistEmpty"), wishlistSummary: el("wishlistSummary"),
-  wishlistExportBtn: el("wishlistExportBtn"),
+  wishlistExportBtn: el("wishlistExportBtn"), wishlistSort: el("wishlistSort"),
   openFolderBtn: el("openFolderBtn"),
   cardPanel: el("cardPanel"), collectionPanel: el("collectionPanel"),
   collGrid: el("collGrid"), collEmpty: el("collEmpty"), collSummary: el("collSummary"),
@@ -128,6 +128,14 @@ const state = {
   problems: new Map(), // card id -> Commander rule breaks in the open deck
   collectionView: readPreference("mtg.collection-view", "grid"),
   collectionSort: readPreference("mtg.collection-sort", "name"),
+  wishlistSort: readPreference("mtg.wishlist-sort", "name"),
+  deckSorts: (() => {
+    try {
+      const saved = JSON.parse(readPreference("mtg.deck-sorts", "{}"));
+      return saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
+    }
+    catch { return {}; }
+  })(),
   unusedOnly: readPreference("mtg.collection-unused", "0") === "1",
   collectionFilters: { availability: "all", colors: new Set(), type: "all", rarity: "all" },
   unownedPriceKey: null,
@@ -146,6 +154,11 @@ ui.collectionSort.value = state.collectionSort;
 if (!ui.collectionSort.value) {
   state.collectionSort = "name";
   ui.collectionSort.value = "name";
+}
+ui.wishlistSort.value = state.wishlistSort;
+if (!ui.wishlistSort.value) {
+  state.wishlistSort = "name";
+  ui.wishlistSort.value = "name";
 }
 
 /* ------------------------------------------------------------- helpers */
@@ -766,19 +779,21 @@ function renderWishlist() {
   ui.wishlistCount.textContent = items.length;
   ui.wishlistExportBtn.disabled = items.length === 0;
   const total = items.reduce((sum, item) => sum + item.quantity, 0);
-  ui.wishlistSummary.textContent = `${total} card${total === 1 ? "" : "s"} across ${items.length} printing${items.length === 1 ? "" : "s"}. Manual wishes and deck proxies are merged without double-counting.`;
+  const deckCount = new Set(items.flatMap((item) => item.proxy_decks.map((deck) => deck.deck_id))).size;
+  ui.wishlistSummary.textContent = `${total} card${total === 1 ? "" : "s"} across ${items.length} printing${items.length === 1 ? "" : "s"} · ${deckCount} deck${deckCount === 1 ? "" : "s"}.`;
   ui.wishlistEmpty.hidden = items.length > 0;
-  ui.wishlistGrid.innerHTML = items.map((item) => {
-    const sources = [];
-    if (item.manual_quantity) sources.push(`<span class="loc free">Wish ×${item.manual_quantity}</span>`);
-    item.proxy_decks.forEach((deck) => sources.push(
-      `<span class="loc deck" data-deck="${escapeHtml(deck.deck_id)}">${escapeHtml(deck.deck_name)} ×${deck.quantity}</span>`));
-    const remove = item.manual_quantity
-      ? `<button class="drop wishlist-remove" data-wish-drop="${escapeHtml(item.id)}" title="Remove one manual wish">−</button>` : "";
-    return `<figure class="coll-card" data-id="${escapeHtml(item.id)}" tabindex="0">
-      ${thumbHtml(item, `×${item.quantity}`, remove)}
-      <div class="wishlist-sources">${sources.join("")}</div>
-    </figure>`;
+  const groups = wishlistGroups(items);
+  const comparator = wishlistComparator(state.wishlistSort);
+  ui.wishlistGrid.innerHTML = groups.map((group) => {
+    const quantity = group.items.reduce((sum, item) => sum + item.quantity, 0);
+    return `<section class="wishlist-group" aria-labelledby="wishlist-group-${escapeHtml(group.id)}">
+      <header class="wishlist-group-head">
+        <div><h2 id="wishlist-group-${escapeHtml(group.id)}">${escapeHtml(group.name)}</h2>
+          <p>${escapeHtml(group.note)}</p></div>
+        <span>${quantity} card${quantity === 1 ? "" : "s"}</span>
+      </header>
+      <div class="coll-grid">${[...group.items].sort(comparator).map(wishlistTileHtml).join("")}</div>
+    </section>`;
   }).join("");
   wireTiles(ui.wishlistGrid, (id) => openWishlistDetail(id));
   ui.wishlistGrid.querySelectorAll("[data-wish-drop]").forEach((button) => {
@@ -789,8 +804,67 @@ function renderWishlist() {
   });
 }
 
+function wishlistGroups(items) {
+  const groups = [];
+  const manual = items.map((item) => ({
+    ...item, quantity: Math.max(0, item.manual_quantity - item.proxy_quantity),
+  })).filter((item) => item.quantity).map((item) => ({
+    ...item, source: "manual",
+  }));
+  if (manual.length) {
+    groups.push({
+      id: "manual", name: "Not in a deck",
+      note: "Manual wishes beyond the copies already needed by decks.", items: manual,
+    });
+  }
+  const byDeck = new Map();
+  items.forEach((item) => item.proxy_decks.forEach((deck) => {
+    if (!byDeck.has(deck.deck_id)) {
+      byDeck.set(deck.deck_id, { id: deck.deck_id, name: deck.deck_name, items: [] });
+    }
+    byDeck.get(deck.deck_id).items.push({
+      ...item, quantity: deck.quantity, source: "deck", sourceDeckId: deck.deck_id,
+    });
+  }));
+  [...byDeck.values()].sort((a, b) => a.name.localeCompare(b.name)).forEach((group) => {
+    group.note = "Proxy cards needed by this deck.";
+    groups.push(group);
+  });
+  return groups;
+}
+
+function wishlistTileHtml(item) {
+  const remove = item.source === "manual"
+    ? `<button class="drop wishlist-remove" data-wish-drop="${escapeHtml(item.id)}" title="Remove one manual wish">−</button>` : "";
+  const source = item.source === "manual"
+    ? `<span class="loc free">Manual wish ×${item.quantity}</span>`
+    : `<span class="loc deck" data-deck="${escapeHtml(item.sourceDeckId)}">Open deck</span>`;
+  return `<figure class="coll-card" data-id="${escapeHtml(item.id)}" tabindex="0">
+    ${thumbHtml(item, `×${item.quantity}`, remove)}
+    <div class="wishlist-sources">${source}</div>
+  </figure>`;
+}
+
+function wishlistComparator(sort) {
+  const byName = (a, b) => (a.name || "").localeCompare(b.name || "") ||
+    (a.set || "").localeCompare(b.set || "") ||
+    (a.collector_number || "").localeCompare(b.collector_number || "");
+  if (sort === "mana") return (a, b) => (Number(a.card?.cmc) || 0) - (Number(b.card?.cmc) || 0) || byName(a, b);
+  if (sort === "price") return (a, b) => cardValue(b) - cardValue(a) || byName(a, b);
+  if (sort === "quantity") return (a, b) => b.quantity - a.quantity || byName(a, b);
+  if (sort === "set") return (a, b) => (a.card?.set_name || a.set || "").localeCompare(b.card?.set_name || b.set || "") || byName(a, b);
+  return byName;
+}
+
+function setWishlistSort() {
+  state.wishlistSort = ui.wishlistSort.value;
+  savePreference("mtg.wishlist-sort", state.wishlistSort);
+  renderWishlist();
+}
+
 function cardValue(entry) {
-  return Number.parseFloat((entry.card || {}).prices?.usd) || 0;
+  const prices = (entry.card || {}).prices || {};
+  return Number.parseFloat(prices.usd || prices.usd_foil || prices.usd_etched) || 0;
 }
 
 function collectionComparator(sort) {
@@ -1533,26 +1607,60 @@ function renderDeckPanel() {
       : line.card_id === deck.commander_id ? "commander" : cardCategory(card);
     groups.get(key).push({ line, entry, card });
   });
-  groups.forEach((items) => items.sort((a, b) => {
-    const cmc = (x) => x.card.cmc || 0;
-    return cmc(a) - cmc(b)
-      || lineName(a.line).localeCompare(lineName(b.line));
-  }));
-
   ui.deckEmpty.hidden = deck.cards.length > 0;
   ui.deckGrid.innerHTML = CATEGORIES
     .filter((category) => groups.get(category.key).length)
     .map((category) => {
-      const items = groups.get(category.key);
+      const sort = deckSortFor(category.key);
+      const items = groups.get(category.key).sort(deckItemComparator(sort));
       const count = items.reduce((sum, item) => sum + item.line.quantity, 0);
       return `
         <div class="type-col">
-          <h4><span>${category.label}</span><span class="n">${count}</span></h4>
+          <h4><span>${category.label}</span><span class="n">${count}</span>
+            <select class="deck-col-sort" data-deck-column-sort="${category.key}"
+                    aria-label="Sort ${category.label}">
+              ${deckSortOptions(sort)}
+            </select>
+          </h4>
           <div class="stack">${items.map((item) => stackCardHtml(item, deck)).join("")}</div>
         </div>`;
     }).join("");
 
   wireDeckCards();
+  ui.deckGrid.querySelectorAll("[data-deck-column-sort]").forEach((select) => {
+    select.addEventListener("change", () => {
+      state.deckSorts[select.dataset.deckColumnSort] = select.value;
+      savePreference("mtg.deck-sorts", JSON.stringify(state.deckSorts));
+      renderDeckPanel();
+    });
+  });
+}
+
+const DECK_SORTS = [
+  ["mana", "Mana ↑"], ["name", "Name A–Z"], ["price", "Price ↓"],
+  ["quantity", "Quantity ↓"], ["rarity", "Rarity ↓"],
+];
+
+function deckSortFor(category) {
+  const sort = state.deckSorts[category];
+  return DECK_SORTS.some(([value]) => value === sort) ? sort : "mana";
+}
+
+function deckSortOptions(selected) {
+  return DECK_SORTS.map(([value, label]) =>
+    `<option value="${value}"${value === selected ? " selected" : ""}>${label}</option>`).join("");
+}
+
+function deckItemComparator(sort) {
+  const byName = (a, b) => lineName(a.line).localeCompare(lineName(b.line));
+  const price = (item) => Number.parseFloat(item.card?.prices?.usd ||
+    item.card?.prices?.usd_foil || item.card?.prices?.usd_etched) || 0;
+  const rarity = { mythic: 4, rare: 3, uncommon: 2, common: 1 };
+  if (sort === "name") return byName;
+  if (sort === "price") return (a, b) => price(b) - price(a) || byName(a, b);
+  if (sort === "quantity") return (a, b) => b.line.quantity - a.line.quantity || byName(a, b);
+  if (sort === "rarity") return (a, b) => (rarity[b.card?.rarity] || 0) - (rarity[a.card?.rarity] || 0) || byName(a, b);
+  return (a, b) => (Number(a.card?.cmc) || 0) - (Number(b.card?.cmc) || 0) || byName(a, b);
 }
 
 async function renderUnownedPrice(deck) {
@@ -2330,6 +2438,7 @@ ui.removeBtn.addEventListener("click", () => state.card && removeFromCollection(
 ui.viewCollectionBtn.addEventListener("click", showCollectionView);
 ui.wishlistBtn.addEventListener("click", showWishlistView);
 ui.wishlistExportBtn.addEventListener("click", exportWishlist);
+ui.wishlistSort.addEventListener("change", setWishlistSort);
 ui.openFolderBtn.addEventListener("click", openFolder);
 ui.collectionFilter.addEventListener("input", renderCollection);
 ui.collectionSort.addEventListener("change", setCollectionSort);
