@@ -25,9 +25,9 @@ API = "https://api.scryfall.com"
 API_PREFIX = "https://api.scryfall.com/"
 IMAGE_PREFIX = "https://cards.scryfall.io/"
 USER_AGENT = "MTGCardViewer/1.0 (desktop card viewer)"
-MIN_INTERVAL = 0.15  # seconds between requests; Scryfall asks for 50-100ms and
-                    # starts refusing around 10/sec, so leave real headroom
+MIN_INTERVAL = 0.20  # Cap this process at five request starts per second.
 TIMEOUT = 20
+MAX_RATE_LIMIT_RETRIES = 3
 
 
 def _cache_root():
@@ -55,24 +55,56 @@ class ScryfallError(Exception):
 
 _throttle_lock = threading.Lock()
 _last_request = 0.0
+_blocked_until = 0.0
 
 
 def _throttle():
     """Space requests out so we stay well inside Scryfall's rate limit."""
     global _last_request
+    while True:
+        with _throttle_lock:
+            now = time.monotonic()
+            wait = max(MIN_INTERVAL - (now - _last_request),
+                       _blocked_until - now)
+            if wait <= 0:
+                _last_request = now
+                return
+        time.sleep(wait)
+
+
+def _defer_requests(seconds):
+    """Pause every worker after Scryfall asks this process to slow down."""
+    global _blocked_until
     with _throttle_lock:
-        wait = MIN_INTERVAL - (time.monotonic() - _last_request)
-        if wait > 0:
-            time.sleep(wait)
-        _last_request = time.monotonic()
+        _blocked_until = max(_blocked_until, time.monotonic() + seconds)
+
+
+def _retry_delay(exc, attempt):
+    """Prefer Scryfall's Retry-After value, with bounded fallback backoff."""
+    try:
+        return max(0.5, min(float(exc.headers.get("Retry-After")), 60.0))
+    except (AttributeError, TypeError, ValueError):
+        return min(2 ** attempt, 30.0)
+
+
+def _urlopen(request):
+    for attempt in range(MAX_RATE_LIMIT_RETRIES + 1):
+        _throttle()
+        try:
+            return urllib.request.urlopen(request, timeout=TIMEOUT)
+        except urllib.error.HTTPError as exc:
+            if exc.code != 429 or attempt == MAX_RATE_LIMIT_RETRIES:
+                raise
+            delay = _retry_delay(exc, attempt)
+            exc.close()
+            _defer_requests(delay)
 
 
 def _open(url, accept):
-    _throttle()
     req = urllib.request.Request(
         url, headers={"User-Agent": USER_AGENT, "Accept": accept}
     )
-    return urllib.request.urlopen(req, timeout=TIMEOUT)
+    return _urlopen(req)
 
 
 def _get_json(url):
@@ -159,7 +191,6 @@ def cards_by_identifiers(identifiers):
     for start in range(0, len(identifiers), COLLECTION_BATCH):
         chunk = identifiers[start:start + COLLECTION_BATCH]
         payload = json.dumps({"identifiers": chunk}).encode("utf-8")
-        _throttle()
         request = urllib.request.Request(
             "%s/cards/collection" % API,
             data=payload,
@@ -170,7 +201,7 @@ def cards_by_identifiers(identifiers):
             },
         )
         try:
-            with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+            with _urlopen(request) as response:
                 body = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             raise ScryfallError("Scryfall refused the batch (HTTP %s)" % exc.code,
