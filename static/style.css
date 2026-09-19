@@ -1116,6 +1116,7 @@ kbd {
 
 .stack-card {
   position: relative;
+  z-index: 0;
   width: 100%;
   aspect-ratio: 488 / 680;
   border-radius: 4.75% / 3.4%;
