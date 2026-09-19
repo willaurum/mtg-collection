@@ -743,8 +743,11 @@ kbd {
 .wishlist-group-head { display: flex; align-items: end; justify-content: space-between; gap: 18px; margin: 0 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
 .wishlist-group-head h2 { margin: 0; color: var(--gold); font: 500 calc(18px * var(--text-scale, 1)) var(--display); }
 .wishlist-group-head p { margin: 3px 0 0; color: var(--faint); font-size: calc(10.5px * var(--text-scale, 1)); }
-.wishlist-group-head > span { flex: 0 0 auto; color: var(--dim); font: 600 calc(10.5px * var(--text-scale, 1)) var(--sans); }
+.wishlist-group-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 9px; }
+.wishlist-group-actions > span { color: var(--dim); font: 600 calc(10.5px * var(--text-scale, 1)) var(--sans); white-space: nowrap; }
+.wishlist-group-actions .btn { padding: 5px 8px; font-size: calc(10px * var(--text-scale, 1)); }
 #wishlistPanel .head-actions { align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+#deckPanel .head-actions { align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 .toolbar-label { color: var(--faint); font: 600 calc(9.5px * var(--text-scale, 1)) var(--sans); letter-spacing: .1em; text-transform: uppercase; }
 .wishlist-sources { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .wishlist-sources .loc { cursor: default; }
@@ -1106,7 +1109,6 @@ kbd {
 
 .type-col h4 {
   display: flex;
-  flex-wrap: wrap;
   justify-content: space-between;
   align-items: baseline;
   gap: 8px;
@@ -1120,8 +1122,6 @@ kbd {
 }
 
 .type-col h4 .n { color: var(--gold); letter-spacing: 0; font-size: calc(11.5px * var(--text-scale, 1)); }
-.deck-col-sort { width: 100%; padding: 4px 22px 4px 6px; border: 1px solid var(--line); border-radius: var(--r-sm); outline: none; background: var(--sunken); color: var(--dim); font: 500 calc(9.5px * var(--text-scale, 1)) var(--sans); letter-spacing: 0; text-transform: none; }
-.deck-col-sort:hover, .deck-col-sort:focus { border-color: var(--bronze); color: var(--text); }
 
 .stack { position: relative; padding-bottom: 4px; }
 
@@ -1475,6 +1475,7 @@ kbd {
 
 @media (max-width: 700px) {
   .view-head { flex-wrap: wrap; }
+  .wishlist-group-head { align-items: flex-start; flex-direction: column; }
   .collection-toolbar { width: 100%; }
   .collection-search-row .collection-filter { width: auto; flex: 1; }
   .collection-control-row { justify-content: flex-start; flex-wrap: wrap; }

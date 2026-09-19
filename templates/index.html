@@ -247,7 +247,7 @@
             <option value="quantity">Quantity high–low</option>
             <option value="set">Set A–Z</option>
           </select>
-          <button class="btn" id="wishlistExportBtn">Export wishlist</button>
+          <button class="btn" id="wishlistExportBtn">Export all</button>
         </div>
       </header>
       <div class="view-body">
@@ -415,6 +415,14 @@
           <p class="deck-problems" id="deckProblems" hidden></p>
         </div>
         <div class="head-actions">
+          <label class="toolbar-label" for="deckSort">Sort columns</label>
+          <select class="view-select" id="deckSort" aria-label="Sort every deck column">
+            <option value="mana">Mana value low–high</option>
+            <option value="name">Name A–Z</option>
+            <option value="price">Price high–low</option>
+            <option value="quantity">Quantity high–low</option>
+            <option value="rarity">Rarity high–low</option>
+          </select>
           <button class="btn quiet" id="deckExportBtn">Copy decklist</button>
           <button class="btn" id="goldfishBtn">Goldfish / Practice</button>
           <button class="btn quiet" id="proxyListBtn" hidden>Proxies</button>

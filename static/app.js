@@ -68,6 +68,7 @@ const ui = {
   deckImportProblemsTitle: el("deckImportProblemsTitle"), deckImportProblems: el("deckImportProblems"),
   deckPanel: el("deckPanel"), deckName: el("deckName"), deckSummary: el("deckSummary"),
   deckCategory: el("deckCategory"), deckPrice: el("deckPrice"), deckExportBtn: el("deckExportBtn"),
+  deckSort: el("deckSort"),
   deckUnownedPrice: el("deckUnownedPrice"),
   deckExportDialog: el("deckExportDialog"), deckExportText: el("deckExportText"),
   goldfishBtn: el("goldfishBtn"), goldfishDialog: el("goldfishDialog"),
@@ -129,13 +130,7 @@ const state = {
   collectionView: readPreference("mtg.collection-view", "grid"),
   collectionSort: readPreference("mtg.collection-sort", "name"),
   wishlistSort: readPreference("mtg.wishlist-sort", "name"),
-  deckSorts: (() => {
-    try {
-      const saved = JSON.parse(readPreference("mtg.deck-sorts", "{}"));
-      return saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
-    }
-    catch { return {}; }
-  })(),
+  deckSort: readPreference("mtg.deck-sort", "mana"),
   unusedOnly: readPreference("mtg.collection-unused", "0") === "1",
   collectionFilters: { availability: "all", colors: new Set(), type: "all", rarity: "all" },
   unownedPriceKey: null,
@@ -159,6 +154,11 @@ ui.wishlistSort.value = state.wishlistSort;
 if (!ui.wishlistSort.value) {
   state.wishlistSort = "name";
   ui.wishlistSort.value = "name";
+}
+ui.deckSort.value = state.deckSort;
+if (!ui.deckSort.value) {
+  state.deckSort = "mana";
+  ui.deckSort.value = "mana";
 }
 
 /* ------------------------------------------------------------- helpers */
@@ -790,7 +790,10 @@ function renderWishlist() {
       <header class="wishlist-group-head">
         <div><h2 id="wishlist-group-${escapeHtml(group.id)}">${escapeHtml(group.name)}</h2>
           <p>${escapeHtml(group.note)}</p></div>
-        <span>${quantity} card${quantity === 1 ? "" : "s"}</span>
+        <div class="wishlist-group-actions">
+          <span>${quantity} card${quantity === 1 ? "" : "s"}</span>
+          <button class="btn quiet" type="button" data-wishlist-export="${escapeHtml(group.id)}">Export section</button>
+        </div>
       </header>
       <div class="coll-grid">${[...group.items].sort(comparator).map(wishlistTileHtml).join("")}</div>
     </section>`;
@@ -800,6 +803,12 @@ function renderWishlist() {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
       removeFromWishlist(button.dataset.wishDrop);
+    });
+  });
+  ui.wishlistGrid.querySelectorAll("[data-wishlist-export]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const group = groups.find((item) => item.id === button.dataset.wishlistExport);
+      if (group) exportWishlistGroup(group);
     });
   });
 }
@@ -1611,44 +1620,16 @@ function renderDeckPanel() {
   ui.deckGrid.innerHTML = CATEGORIES
     .filter((category) => groups.get(category.key).length)
     .map((category) => {
-      const sort = deckSortFor(category.key);
-      const items = groups.get(category.key).sort(deckItemComparator(sort));
+      const items = groups.get(category.key).sort(deckItemComparator(state.deckSort));
       const count = items.reduce((sum, item) => sum + item.line.quantity, 0);
       return `
         <div class="type-col">
-          <h4><span>${category.label}</span><span class="n">${count}</span>
-            <select class="deck-col-sort" data-deck-column-sort="${category.key}"
-                    aria-label="Sort ${category.label}">
-              ${deckSortOptions(sort)}
-            </select>
-          </h4>
+          <h4><span>${category.label}</span><span class="n">${count}</span></h4>
           <div class="stack">${items.map((item) => stackCardHtml(item, deck)).join("")}</div>
         </div>`;
     }).join("");
 
   wireDeckCards();
-  ui.deckGrid.querySelectorAll("[data-deck-column-sort]").forEach((select) => {
-    select.addEventListener("change", () => {
-      state.deckSorts[select.dataset.deckColumnSort] = select.value;
-      savePreference("mtg.deck-sorts", JSON.stringify(state.deckSorts));
-      renderDeckPanel();
-    });
-  });
-}
-
-const DECK_SORTS = [
-  ["mana", "Mana ↑"], ["name", "Name A–Z"], ["price", "Price ↓"],
-  ["quantity", "Quantity ↓"], ["rarity", "Rarity ↓"],
-];
-
-function deckSortFor(category) {
-  const sort = state.deckSorts[category];
-  return DECK_SORTS.some(([value]) => value === sort) ? sort : "mana";
-}
-
-function deckSortOptions(selected) {
-  return DECK_SORTS.map(([value, label]) =>
-    `<option value="${value}"${value === selected ? " selected" : ""}>${label}</option>`).join("");
 }
 
 function deckItemComparator(sort) {
@@ -1661,6 +1642,12 @@ function deckItemComparator(sort) {
   if (sort === "quantity") return (a, b) => b.line.quantity - a.line.quantity || byName(a, b);
   if (sort === "rarity") return (a, b) => (rarity[b.card?.rarity] || 0) - (rarity[a.card?.rarity] || 0) || byName(a, b);
   return (a, b) => (Number(a.card?.cmc) || 0) - (Number(b.card?.cmc) || 0) || byName(a, b);
+}
+
+function setDeckSort() {
+  state.deckSort = ui.deckSort.value;
+  savePreference("mtg.deck-sort", state.deckSort);
+  renderDeckPanel();
 }
 
 async function renderUnownedPrice(deck) {
@@ -1990,8 +1977,15 @@ function wishlistExportText(items) {
 function exportWishlist() {
   const text = wishlistExportText(state.library.wishlist || []);
   if (!text) return setStatus("Your wishlist is empty.");
-  openListExport("Export wishlist", text + "\n",
+  openListExport("Export all wishlist sections", text + "\n",
     "Copy this quantity-and-name list into another site. Uses the wishlist’s merged quantities; different printings of the same card are combined.");
+}
+
+function exportWishlistGroup(group) {
+  const text = wishlistExportText(group.items || []);
+  if (!text) return setStatus(`${group.name} has nothing to export.`);
+  openListExport(`Export ${group.name}`, text + "\n",
+    "This list contains only this wishlist section and is ready to paste into another site.");
 }
 
 function openListExport(title, text, description) {
@@ -2512,6 +2506,7 @@ ui.deckImportDialog.querySelectorAll("[data-deck-import-mode]").forEach((button)
 });
 ui.deleteDeckBtn.addEventListener("click", deleteDeck);
 ui.deckExportBtn.addEventListener("click", exportDeck);
+ui.deckSort.addEventListener("change", setDeckSort);
 ui.goldfishBtn.addEventListener("click", openGoldfish);
 el("goldfishCloseBtn").addEventListener("click", closeGoldfish);
 el("goldfishDoneBtn").addEventListener("click", closeGoldfish);

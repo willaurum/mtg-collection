@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 const source = fs.readFileSync('static/app.js', 'utf8');
+const html = fs.readFileSync('templates/index.html', 'utf8');
 
 const groupsStart = source.indexOf('function wishlistGroups(');
 const groupsEnd = source.indexOf('\nfunction wishlistTileHtml(', groupsStart);
@@ -41,10 +42,9 @@ assert.deepEqual([...wishes].sort(wishlistContext.wishlistComparator('mana')).ma
 assert.deepEqual([...wishes].sort(wishlistContext.wishlistComparator('price')).map((x) => x.name), ['Beta', 'Alpha']);
 assert.deepEqual([...wishes].sort(wishlistContext.wishlistComparator('quantity')).map((x) => x.name), ['Alpha', 'Beta']);
 
-const deckStart = source.indexOf('const DECK_SORTS =');
-const deckEnd = source.indexOf('\nasync function renderUnownedPrice(', deckStart);
+const deckStart = source.indexOf('function deckItemComparator(');
+const deckEnd = source.indexOf('\nfunction setDeckSort(', deckStart);
 const deckContext = {
-  state: { deckSorts: { creature: 'price', land: 'invalid' } },
   lineName: (line) => line.name,
 };
 vm.createContext(deckContext);
@@ -54,8 +54,6 @@ const deckItems = [
   { line: { name: 'Beta', quantity: 1 }, card: { cmc: 2, rarity: 'rare', prices: { usd: '8' } } },
   { line: { name: 'Alpha', quantity: 3 }, card: { cmc: 4, rarity: 'common', prices: { usd: '2' } } },
 ];
-assert.equal(deckContext.deckSortFor('creature'), 'price');
-assert.equal(deckContext.deckSortFor('land'), 'mana');
 assert.deepEqual([...deckItems].sort(deckContext.deckItemComparator('name')).map((x) => x.line.name), ['Alpha', 'Beta']);
 assert.deepEqual([...deckItems].sort(deckContext.deckItemComparator('mana')).map((x) => x.line.name), ['Beta', 'Alpha']);
 assert.deepEqual([...deckItems].sort(deckContext.deckItemComparator('price')).map((x) => x.line.name), ['Beta', 'Alpha']);
@@ -64,4 +62,8 @@ assert.deepEqual([...deckItems].sort(deckContext.deckItemComparator('rarity')).m
 
 assert.match(source, /name: "Not in a deck"/);
 assert.match(source, /Proxy cards needed by this deck/);
+assert.match(source, /data-wishlist-export/);
+assert.match(source, /function exportWishlistGroup\(/);
+assert.match(html, /id="deckSort"/);
+assert.doesNotMatch(source, /data-deck-column-sort/);
 console.log('Wishlist and deck sorting checks passed.');
