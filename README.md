@@ -69,6 +69,28 @@ That produces `dist\MTGCardViewer.exe`. The spec bundles `templates/` and
 Misspell a card badly and the toast suggests real names instead of just
 failing.
 
+## Selecting multiple cards
+
+In Collection or an open deck, choose **Select cards**, click the selection
+button on a card, or **Ctrl/⌘-click** a card. **Shift-click** selects a range in
+the displayed order. **Space** toggles a focused card; **Select all shown**
+selects the visible cards. **Clear** empties the selection, and **Done selecting**
+or **Escape** leaves selection mode. Ordinary clicks still open card details
+outside selection mode.
+
+- In Collection, choose a destination deck and main deck or maybeboard, then
+  **Add one each** to add one copy of every selected printing. Existing copy
+  limits still apply. **Copy selected list** exports full collection quantities.
+- In a deck, move selected rows to the main deck or maybeboard, copy their
+  quantities as a list, or remove them. Removal asks for an inline confirmation,
+  removes every copy in those deck rows, and keeps the copies in your collection.
+- Selection survives sorting and switching between grid and list. Filtering
+  deselects cards that are no longer shown; navigation clears the selection.
+- Bulk writes run one card at a time. If a write fails, the batch stops and
+  reports how many completed; failed and unattempted cards remain selected while
+  you stay in that view. If the connection was lost, refresh before retrying to
+  check whether the server saved the last request.
+
 ## Settings
 
 Open **Settings** in the rail to choose light/dark theme, text size, compact
@@ -421,9 +443,17 @@ the card.
 | `templates/` | The app shell and the login page |
 | `static/style.css` | The whole theme |
 | `static/app.js` | Front end — search, autofill, rendering, collection, decks, import |
+| `static/multiselect.js` | Collection/deck selection and bulk actions |
 | `MTGCardViewer.spec`, `build_exe.ps1` | PyInstaller packaging |
 | `legacy_tk/` | The earlier Tkinter version, kept for reference |
 | `.cache/images/` | Downloaded card art (gitignored) |
+
+## Multiselect checks
+
+Run `node tests/test_multiselect.js` for selection and batch regression checks.
+The browser interaction check is `node tests/test_multiselect_ui.js`; it requires
+the `playwright` Node package and its Chromium browser. Set
+`PLAYWRIGHT_CHANNEL=msedge` to use an installed Microsoft Edge instead.
 
 ## Notes on the API
 

@@ -1,10 +1,7 @@
-1. Multiselect
-2. Multiplayer
-3.
-4.
-5.
+1. Multiplayer
 
 Finished:
+Multiselect in collection and deck views
 proxy changes
 Easier adding to dollection from deck builder
 Rendering issues in wishlist

@@ -771,6 +771,7 @@ function renderCollection() {
       ${locationChips(entry)}
     </figure>`).join("");
   wireTiles(ui.collGrid, (id) => openCardById(id));
+  syncCardSelection("collection");
 }
 
 function renderWishlist() {
@@ -1660,6 +1661,7 @@ function renderDeckPanel() {
     }).join("");
 
   wireDeckCards();
+  syncCardSelection("deck");
 }
 
 function deckItemComparator(sort) {
@@ -1922,6 +1924,7 @@ const NAV = {
 };
 
 function showView(panel, navKey) {
+  resetCardSelections();
   state.navigationRevision = (state.navigationRevision || 0) + 1;
   savePreference("mtg.last-view", JSON.stringify({ view: navKey, deckId: state.deckId }));
   if (navKey !== "settings") el("passwordForm").reset();
@@ -2611,6 +2614,7 @@ ui.settingsBtn.addEventListener("click", showSettingsView);
 ui.refreshAllPricesBtn.addEventListener("click", refreshAllPrices);
 ui.logoutBtn.addEventListener("click", signOut);
 
+initCardSelections();
 initializeSettings();
 loadIdentity();
 restoreRecent();
