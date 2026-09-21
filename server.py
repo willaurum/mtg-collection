@@ -503,6 +503,21 @@ def api_deck_proxy():
                         "deck_ids": [result["deck_id"]], "deck_id": result["deck_id"]})
 
 
+@app.post("/api/decks/acquire-proxy")
+@auth.api_login_required
+def api_deck_acquire_proxy():
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict) or not all(
+            isinstance(payload.get(key), str) and payload[key]
+            for key in ("deck_id", "card_id")):
+        return jsonify(error="Choose a deck and card first."), 400
+    return _store_call(lambda: store.acquire_deck_proxy(
+        auth.user_id(), payload["deck_id"], payload["card_id"]),
+        lambda result: {"entry_ids": [result["card_id"]],
+                        "deck_ids": [result["deck_id"]],
+                        "added_quantity": result["added_quantity"]})
+
+
 @app.post("/api/decks/move")
 @auth.api_login_required
 def api_deck_move():

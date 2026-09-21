@@ -61,6 +61,81 @@ class MutationPatchTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.get_data(as_text=True))
         return response.get_json()
 
+    def test_acquire_proxy_adds_shortfall_and_reserves_exact_printing(self):
+        chosen = card("chosen", "Bolt")
+        store.add_card(self.user_id, chosen, 2)
+        other_deck = store.create_deck(self.user_id, "Already using one")
+        store.deck_add(self.user_id, other_deck, "chosen")
+        deck = store.create_deck(self.user_id, "Proxy deck")
+        store.deck_add(self.user_id, deck, quantity=3, card=chosen, force_proxy=True)
+        store.set_deck_role(self.user_id, deck, "chosen", "commander")
+        result = self.post("/api/decks/acquire-proxy", {"deck_id": deck, "card_id": "chosen"})
+        self.assertEqual(result["added_quantity"], 2)
+        self.assertEqual(result["entries"][0]["quantity"], 4)
+        self.assertEqual(result["entries"][0]["available"], 0)
+        self.assertEqual(result["decks"][0]["commander_id"], "chosen")
+        self.assertEqual(result["decks"][0]["cards"][0]["quantity"], 3)
+        self.assertFalse(result["decks"][0]["cards"][0]["proxy"])
+        self.assertEqual(result["wishlist"], [])
+        repeated = self.post("/api/decks/acquire-proxy", {"deck_id": deck, "card_id": "chosen"})
+        self.assertEqual(repeated["added_quantity"], 0)
+        self.assertEqual(repeated["entries"][0]["quantity"], 4)
+
+    def test_acquire_proxy_without_collection_and_with_free_copies(self):
+        for quantity in (0, 5):
+            with self.subTest(owned=quantity):
+                chosen = card(f"printing-{quantity}", "Same card")
+                if quantity:
+                    store.add_card(self.user_id, chosen, quantity)
+                deck = store.create_deck(self.user_id, "Acquire")
+                store.deck_add(self.user_id, deck, quantity=2, card=chosen, force_proxy=True)
+                result = self.post("/api/decks/acquire-proxy", {"deck_id": deck, "card_id": chosen["id"]})
+                self.assertEqual(result["added_quantity"], max(0, 2 - quantity))
+                self.assertEqual(result["entries"][0]["id"], chosen["id"])
+                self.assertFalse(result["decks"][0]["cards"][0]["proxy"])
+
+    def test_acquire_maybeboard_preserves_companion_and_does_not_allocate(self):
+        deck = store.create_deck(self.user_id, "Companion")
+        store.deck_add(self.user_id, deck, quantity=2, card=card("comp", "Companion"),
+                       zone="maybeboard", force_proxy=True)
+        store.set_deck_role(self.user_id, deck, "comp", "companion")
+        result = self.post("/api/decks/acquire-proxy", {"deck_id": deck, "card_id": "comp"})
+        self.assertEqual(result["added_quantity"], 2)
+        self.assertEqual(result["entries"][0]["available"], 2)
+        self.assertEqual(result["decks"][0]["companion_id"], "comp")
+        self.assertEqual(result["decks"][0]["cards"][0]["zone"], "maybeboard")
+        self.assertFalse(result["decks"][0]["cards"][0]["proxy"])
+
+    def test_acquire_proxy_rejects_other_users_missing_cards_and_bad_requests(self):
+        other = auth.create_user("proxy-owner", "a long test password")
+        deck = store.create_deck(other, "Private")
+        store.deck_add(other, deck, card=card("private", "Private"), force_proxy=True)
+        payload = {"deck_id": deck, "card_id": "private"}
+        url = "/api/decks/acquire-proxy"
+        self.assertEqual(self.client.post(url, json=payload).status_code, 409)
+        self.assertEqual(app.test_client().post(url, json=payload).status_code, 401)
+        own_deck = store.create_deck(self.user_id, "Own")
+        self.assertEqual(self.client.post(url, json={"deck_id": own_deck, "card_id": "missing"}).status_code, 409)
+        for invalid in ([], {}, {"deck_id": own_deck, "card_id": 1}):
+            self.assertEqual(self.client.post(url, json=invalid).status_code, 400)
+        self.assertEqual(store.entries(self.user_id), [])
+        self.assertTrue(store.deck_state(other, deck)["cards"][0]["proxy"])
+
+    def test_acquire_proxy_rolls_back_collection_if_conversion_fails(self):
+        import sqlite3
+        deck = store.create_deck(self.user_id, "Atomic")
+        store.deck_add(self.user_id, deck, card=card("atomic", "Atomic"), force_proxy=True)
+        conn = db.connect()
+        conn.execute("""CREATE TEMP TRIGGER reject_conversion BEFORE UPDATE OF proxy ON deck_cards
+                        BEGIN SELECT RAISE(ABORT, 'test conversion failure'); END""")
+        try:
+            with self.assertRaises(sqlite3.IntegrityError):
+                store.acquire_deck_proxy(self.user_id, deck, "atomic")
+        finally:
+            conn.execute("DROP TRIGGER reject_conversion")
+        self.assertIsNone(store.entry(self.user_id, "atomic"))
+        self.assertTrue(store.deck_state(self.user_id, deck)["cards"][0]["proxy"])
+
     def test_token_search_route(self):
         with patch("scryfall.search_tokens", return_value={"data": [{"name": "Treasure"}], "has_more": False}) as search:
             response = self.client.get("/api/tokens?q=Treasure&page=2")

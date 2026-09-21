@@ -703,6 +703,42 @@ def set_proxy(user_id, deck_id, card_id, proxy):
             "previous_card_id": card_id}
 
 
+def acquire_deck_proxy(user_id, deck_id, card_id):
+    """Acquire the missing copies of this exact printing and use them atomically."""
+    added = 0
+    with db.transaction() as conn:
+        _owned_deck(conn, user_id, deck_id)
+        line = conn.execute(
+            "SELECT quantity, zone, proxy FROM deck_cards WHERE deck_id = ? AND card_id = ?",
+            (deck_id, card_id),
+        ).fetchone()
+        if not line:
+            raise StoreError("That card is no longer in the deck.")
+        # A repeated request after a successful conversion must not add copies again.
+        if line["proxy"]:
+            owned = conn.execute(
+                "SELECT quantity FROM collection WHERE user_id = ? AND card_id = ?",
+                (user_id, card_id),
+            ).fetchone()
+            available = int(owned["quantity"]) if owned else 0
+            if line["zone"] == "main":
+                available -= sum(item["quantity"] for item in
+                                 _allocations(conn, user_id).get(card_id, []))
+            added = max(0, int(line["quantity"]) - available)
+            if added:
+                conn.execute(
+                    """INSERT INTO collection (user_id, card_id, quantity, added)
+                       VALUES (?, ?, ?, ?)
+                       ON CONFLICT (user_id, card_id)
+                       DO UPDATE SET quantity = quantity + excluded.quantity""",
+                    (user_id, card_id, added, _now()),
+                )
+            conn.execute("UPDATE deck_cards SET proxy = 0 WHERE deck_id = ? AND card_id = ?",
+                         (deck_id, card_id))
+            conn.execute("UPDATE decks SET updated = ? WHERE id = ?", (_now(), deck_id))
+    return {"deck_id": deck_id, "card_id": card_id, "added_quantity": added}
+
+
 def move_deck_card(user_id, deck_id, card_id, zone):
     """Move one card line between the main deck and the maybeboard."""
     zone = _zone(zone)

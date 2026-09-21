@@ -267,6 +267,13 @@ request, so a 100-card list costs two round trips rather than a hundred.
 
 ## Decks
 
+Wishlist card popups offer **Add one to collection** for the displayed printing.
+This leaves wish quantities and deck proxies unchanged. In a proxy's deck popup,
+**Add to collection & use** adds the missing copies of that exact printing and
+converts the whole row to owned cards in one save. Free copies already owned
+count toward the main-deck row; copies reserved by other decks do not. The card's
+zone and commander, partner, or companion role stay the same.
+
 A deck file stores card **ids and counts only** — the collection stays the one
 record of what you actually own. That makes the central rule easy to state and
 impossible to cheat:

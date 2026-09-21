@@ -1251,12 +1251,14 @@ function openDeckDetail(deckId, cardId) {
     roleButtons.push(["companion", deck.companion_id === cardId, "companion"]);
   }
   ui.detailActions.innerHTML = `
+    ${line.proxy ? '<button class="btn primary" data-detail-acquire title="Adds only the missing copies of this printing, then uses owned cards for this entire row.">Add to collection &amp; use</button>' : ""}
     <button class="btn${line.proxy ? " primary" : ""}" data-detail-proxy>
       ${line.proxy ? "Use owned copy" : "Mark as proxy"}</button>
     <button class="btn" data-detail-move>${destinationLabel}</button>
     ${roleButtons.map(([role, active, label]) =>
       `<button class="btn${active ? " primary" : ""}" data-detail-role="${role}">${active ? `Clear ${label}` : `Make ${label}`}</button>`).join("")}
     <button class="btn quiet danger" data-detail-remove>Remove one</button>`;
+  wireDetailAcquire(card, deckId);
   ui.detailActions.querySelector("[data-detail-proxy]").addEventListener("click", () => {
     mutate("/api/decks/proxy", { deck_id: deckId, card_id: cardId, proxy: !line.proxy },
       () => !line.proxy ? "Proxy enabled." : "Using an owned copy.");
@@ -1408,9 +1410,10 @@ function openWishlistDetail(cardId) {
   }
   detailBase(item.card || {}, "Wishlist card",
     `${item.quantity} needed${sources.length ? ` · ${sources.join(" · ")}` : ""}`);
-  ui.detailActions.innerHTML = item.manual_quantity
+  ui.detailActions.innerHTML = '<button class="btn primary" data-detail-acquire>Add one to collection</button>' + (item.manual_quantity
     ? '<button class="btn" data-detail-remove-wish>Remove one wish</button>'
-    : '<p class="sub">This card is needed by a deck proxy. Open that deck to change it.</p>';
+    : '<p class="sub">This card is needed by a deck proxy. Open that deck to use your owned copy.</p>');
+  wireDetailAcquire(item.card || {});
   const removeButton = ui.detailActions.querySelector("[data-detail-remove-wish]");
   if (removeButton) {
     removeButton.addEventListener("click", async () => {
@@ -1420,6 +1423,21 @@ function openWishlistDetail(cardId) {
       else removeButton.disabled = false;
     });
   }
+}
+
+function wireDetailAcquire(card, deckId = null) {
+  const button = ui.detailActions.querySelector("[data-detail-acquire]");
+  if (!button) return;
+  button.addEventListener("click", async () => {
+    if (button.disabled) return;
+    button.disabled = true;
+    const result = deckId
+      ? await mutate("/api/decks/acquire-proxy", { deck_id: deckId, card_id: card.id }, data =>
+        `Added ${data.added_quantity} ${data.added_quantity === 1 ? "copy" : "copies"} to collection. Using owned cards in this deck.`)
+      : await mutate("/api/collection/add", { card, quantity: 1 }, () => `Added one ${card.name} to collection.`);
+    if (result && button.isConnected) closeCardDetail();
+    else button.disabled = false;
+  });
 }
 
 /* ------------------------------------------------------------- decking */
