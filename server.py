@@ -246,9 +246,9 @@ def _refresh_current_prices(user_id, force=False):
 
 
 def _patch_response(entry_ids=(), removed_entry_ids=(), deck_ids=(),
-                    removed_deck_ids=(), entry_id=None, **extra):
+                    removed_deck_ids=(), entry_id=None, wishlist_changed=True, **extra):
     """Return just the records changed by a successful mutation."""
-    payload = store.patch(auth.user_id(), entry_ids, deck_ids)
+    payload = store.patch(auth.user_id(), entry_ids, deck_ids, wishlist_changed=wishlist_changed)
     payload.update({
         "removed_entries": list(dict.fromkeys(removed_entry_ids)),
         "removed_decks": list(dict.fromkeys(removed_deck_ids)),
@@ -262,13 +262,19 @@ def _patch_response(entry_ids=(), removed_entry_ids=(), deck_ids=(),
 
 def _store_call(work, changed):
     """Run a store operation and return its compact state patch."""
+    affects_wishlist = request.endpoint not in {
+        "api_collection_remove", "api_deck_create", "api_deck_category", "api_deck_commander",
+    }
+    before = store.wishlist_signature(auth.user_id()) if affects_wishlist else None
     try:
         result = work()
     except store.StoreError as exc:
         return jsonify({"error": str(exc)}), 409
     except (OSError, ValueError) as exc:
         return jsonify({"error": "Could not save that: %s" % exc}), 500
-    return _patch_response(**changed(result))
+    return _patch_response(**changed(result),
+                           wishlist_changed=affects_wishlist and
+                           before != store.wishlist_signature(auth.user_id()))
 
 
 @app.get("/api/library")
@@ -469,6 +475,41 @@ def api_deck_add():
                         "proxy_added": result["proxy_added"]})
 
 
+@app.post("/api/decks/batch")
+@auth.api_login_required
+def api_deck_batch():
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify(error="Expected a batch object."), 400
+    ids = payload.get("card_ids")
+    action, zone, deck_id = payload.get("action"), payload.get("zone", "main"), payload.get("deck_id")
+    if (not isinstance(ids, list) or not ids or len(ids) > 10000
+            or not all(isinstance(key, str) and key for key in ids)
+            or not isinstance(deck_id, str) or not deck_id
+            or action not in ("add", "remove", "move")
+            or zone not in ("main", "maybeboard")):
+        return jsonify(error="Choose valid cards, a deck, action and zone."), 400
+    before = store.wishlist_signature(auth.user_id())
+    completed, error = [], None
+    # Each existing store operation remains transactional. Stop at the first
+    # rejection and return one authoritative patch for the successful prefix.
+    for card_id in dict.fromkeys(ids):
+        try:
+            if action == "add":
+                store.deck_add(auth.user_id(), deck_id, card_id, zone=zone)
+            elif action == "remove":
+                store.deck_remove(auth.user_id(), deck_id, card_id, True)
+            else:
+                store.move_deck_card(auth.user_id(), deck_id, card_id, zone)
+        except (store.StoreError, OSError, ValueError) as exc:
+            error = str(exc)
+            break
+        completed.append(card_id)
+    return _patch_response(entry_ids=completed, deck_ids=[deck_id] if completed else [],
+                           completed_ids=completed, batch_error=error,
+                           wishlist_changed=before != store.wishlist_signature(auth.user_id()))
+
+
 @app.post("/api/decks/printing")
 @auth.api_login_required
 def api_deck_printing():
@@ -561,6 +602,7 @@ def api_import_commit():
     resolved = _pending_imports.pop((auth.user_id(), token), None)
     if resolved is None:
         return jsonify({"error": "That preview has expired - preview again."}), 409
+    before = store.wishlist_signature(auth.user_id())
     try:
         added = store.add_many(
             auth.user_id(),
@@ -568,7 +610,8 @@ def api_import_commit():
     except (OSError, ValueError) as exc:
         return jsonify({"error": "Import failed: %s" % exc}), 500
     return _patch_response(
-        entry_ids=[item["card"]["id"] for item in resolved], imported=added)
+        entry_ids=[item["card"]["id"] for item in resolved], imported=added,
+        wishlist_changed=before != store.wishlist_signature(auth.user_id()))
 
 
 @app.post("/api/decks/import/preview")

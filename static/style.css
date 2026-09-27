@@ -1618,3 +1618,7 @@ kbd {
 .practice-token-result img { width: 100%; border-radius: 6px; }
 .practice-token-result span, .practice-token-result small { display: block; margin-top: 4px; }
 .practice-token-result small { color: var(--dim); }
+
+/* Collection tiles are positioned in measured, windowed rows. */
+.windowed-collection { position: relative; overflow-anchor: none; }
+.windowed-collection > .coll-card { position: absolute; box-sizing: border-box; }

@@ -74,7 +74,7 @@ failing.
 In Collection or an open deck, choose **Select cards**, click the selection
 button on a card, or **Ctrl/⌘-click** a card. **Shift-click** selects a range in
 the displayed order. **Space** toggles a focused card; **Select all shown**
-selects the visible cards. **Clear** empties the selection, and **Done selecting**
+selects all cards matching the current filters, including cards outside the viewport. **Clear** empties the selection, and **Done selecting**
 or **Escape** leaves selection mode. Ordinary clicks still open card details
 outside selection mode.
 
@@ -86,10 +86,14 @@ outside selection mode.
   removes every copy in those deck rows, and keeps the copies in your collection.
 - Selection survives sorting and switching between grid and list. Filtering
   deselects cards that are no longer shown; navigation clears the selection.
-- Bulk writes run one card at a time. If a write fails, the batch stops and
-  reports how many completed; failed and unattempted cards remain selected while
-  you stay in that view. If the connection was lost, refresh before retrying to
-  check whether the server saved the last request.
+- Bulk actions send one request and apply one combined update. The server checks
+  each card using the normal ownership rules and stops at the first failure;
+  successful changes remain saved, and failed and unattempted cards stay selected.
+  If the connection was lost, refresh before retrying to check what was saved.
+- Collection grid and list views mount only nearby rows as you scroll. Selection
+  and Shift-click ranges use the full filtered order. Arrow keys move between
+  cards; Home and End jump to the first and last matching card. Search text is
+  cached when card data loads or changes.
 
 ## Settings
 
@@ -142,7 +146,9 @@ a Pi that might lose power mid-write. Each rule (one printing per row, decks
 never holding more copies than you own) is enforced inside a transaction rather
 than by the page asking nicely. The page loads one complete library snapshot at
 startup; routine edits then return only the card or deck that changed, plus the
-updated totals, keeping normal use light over Wi-Fi.
+updated totals, keeping normal use light over Wi-Fi. Unchanged wishlists are
+omitted from edit responses; rebuilding a wishlist uses two queries regardless
+of its card count.
 
 ## Running it on a Raspberry Pi
 

@@ -33,21 +33,20 @@ async function checkBatch(action, failAt) {
     getJson: async (url, options) => {
       calls.push({url, body: JSON.parse(options.body)});
       context.state.deckId = 'different'; // Navigation during the first request.
-      if (calls.length === failAt) throw new Error('Not enough free copies');
-      return {ok: true};
+      return {completed_ids: failAt ? ids.slice(0, failAt - 1) : ids, batch_error: failAt ? 'Not enough free copies' : null};
     },
   });
   await context.runSelectionBatch(scope, action);
-  assert.equal(calls.length, failAt || ids.length, 'stop at the first failure');
-  assert.equal(patches.length, failAt ? failAt - 1 : ids.length);
+  assert.equal(calls.length, 1, 'stop at the first failure');
+  assert.equal(patches.length, 1);
   assert.ok(calls.every(call => call.body.deck_id === 'original'), 'navigation cannot change the destination');
   if (failAt) {
     assert.deepEqual([...selected.ids], ids.slice(failAt - 1), 'keep failed and unattempted rows selected');
     assert.match(result.textContent, /1 of 4 completed/);
   } else assert.equal(selected.ids.size, 0);
-  if (action === 'add') assert.ok(calls.every(call => call.body.quantity === 1 && call.body.zone === 'maybeboard'));
-  if (action === 'remove') assert.ok(calls.every(call => call.body.all === true));
-  if (action === 'main') assert.ok(calls.every(call => call.url === '/api/decks/move' && call.body.zone === 'main'));
+  if (action === 'add') assert.ok(calls.every(call => call.body.card_ids.length === 4 && call.body.zone === 'maybeboard'));
+  if (action === 'remove') assert.ok(calls.every(call => call.body.action === 'remove'));
+  if (action === 'main') assert.ok(calls.every(call => call.url === '/api/decks/batch' && call.body.action === 'move' && call.body.zone === 'main'));
 }
 (async () => {
   await checkBatch('add', 2);

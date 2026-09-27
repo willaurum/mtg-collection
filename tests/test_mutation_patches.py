@@ -61,6 +61,61 @@ class MutationPatchTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.get_data(as_text=True))
         return response.get_json()
 
+    def test_batch_partial_failure_one_patch_and_ownership(self):
+        deck = store.create_deck(self.user_id, "Batch")
+        for key in ("a", "b", "c"):
+            store.add_card(self.user_id, card(key, key))
+        store.deck_add(self.user_id, deck, "b")
+        with patch("store.patch", wraps=store.patch) as patches:
+            result = self.post("/api/decks/batch", {
+                "deck_id": deck, "card_ids": ["a", "a", "b", "c"], "action": "add"})
+        self.assertEqual(patches.call_count, 1)
+        self.assertEqual(result["completed_ids"], ["a"])
+        self.assertTrue(result["batch_error"])
+        self.assertNotIn("wishlist", result)
+        self.assertEqual({line["card_id"] for line in result["decks"][0]["cards"]}, {"a", "b"})
+        other = auth.create_user("other-batch", "another long password")
+        foreign = store.create_deck(other, "Private")
+        result = self.post("/api/decks/batch", {
+            "deck_id": foreign, "card_ids": ["c"], "action": "add"})
+        self.assertEqual(result["completed_ids"], [])
+        self.assertEqual(result["decks"], [])
+        self.assertTrue(result["batch_error"])
+
+    def test_batch_move_remove_and_wishlist_invalidation(self):
+        deck = store.create_deck(self.user_id, "Proxies")
+        store.deck_add(self.user_id, deck, card=card("p", "Proxy"), force_proxy=True)
+        result = self.post("/api/decks/batch", {
+            "deck_id": deck, "card_ids": ["p"], "action": "move", "zone": "maybeboard"})
+        self.assertEqual(result["wishlist"], [])
+        result = self.post("/api/decks/batch", {
+            "deck_id": deck, "card_ids": ["p"], "action": "move", "zone": "main"})
+        self.assertEqual(result["wishlist"][0]["id"], "p")
+        result = self.post("/api/decks/batch", {
+            "deck_id": deck, "card_ids": ["p"], "action": "remove"})
+        self.assertEqual(result["wishlist"], [])
+        self.assertEqual(result["decks"][0]["cards"], [])
+        for payload in ([], {}, {"deck_id": deck, "card_ids": [None], "action": "add"}):
+            self.assertEqual(self.client.post("/api/decks/batch", json=payload).status_code, 400)
+
+    def test_wishlist_queries_constant_and_unchanged_patch_omits_it(self):
+        deck = store.create_deck(self.user_id, "Wishlist")
+        for index in range(12):
+            store.deck_add(self.user_id, deck, card=card(str(index), str(index)), force_proxy=True)
+        queries = []
+        db.connect().set_trace_callback(queries.append)
+        try:
+            self.assertEqual(len(store.wishlist(self.user_id)), 12)
+        finally:
+            db.connect().set_trace_callback(None)
+        self.assertEqual(len(queries), 2)
+        with patch("store.wishlist", wraps=store.wishlist) as wishlist:
+            result = self.post("/api/decks/category", {"id": deck, "category": "Test"})
+            self.assertNotIn("wishlist", result)
+            wishlist.assert_not_called()
+        result = self.post("/api/decks/rename", {"id": deck, "name": "Renamed"})
+        self.assertEqual(result["wishlist"][0]["proxy_decks"][0]["deck_name"], "Renamed")
+
     def test_acquire_proxy_adds_shortfall_and_reserves_exact_printing(self):
         chosen = card("chosen", "Bolt")
         store.add_card(self.user_id, chosen, 2)

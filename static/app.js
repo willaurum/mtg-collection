@@ -480,6 +480,7 @@ function renderRecent() {
 /** Apply the complete snapshot returned when the application first loads. */
 function applyLibrary(data) {
   data.wishlist = data.wishlist || [];
+  data.entries.forEach(cacheCollectionSearchText);
   state.library = data;
   state.entryById = new Map(data.entries.map((e) => [e.id, e]));
   applySummary(data.summary);
@@ -554,7 +555,7 @@ function scheduleDeckSuggest() {
 function applyPatch(data) {
   const entries = new Map(state.library.entries.map((entry) => [entry.id, entry]));
   (data.removed_entries || []).forEach((id) => entries.delete(id));
-  (data.entries || []).forEach((entry) => entries.set(entry.id, entry));
+  (data.entries || []).forEach((entry) => { cacheCollectionSearchText(entry); entries.set(entry.id, entry); });
   state.library.entries = [...entries.values()].sort((a, b) =>
     (b.added || "").localeCompare(a.added || "") ||
     (a.name || "").localeCompare(b.name || ""));
@@ -708,6 +709,10 @@ function thumbHtml(entry, badge, extra) {
     </figcaption>`;
 }
 
+function cacheCollectionSearchText(entry) {
+  entry.searchText = collectionSearchText(entry);
+}
+
 function collectionSearchText(entry) {
   const card = entry.card || {};
   const faces = card.card_faces || [];
@@ -724,7 +729,7 @@ function renderCollection() {
   const filters = state.collectionFilters;
   const entries = allEntries
     .filter((entry) => {
-      const text = collectionSearchText(entry);
+      const text = entry.searchText ?? collectionSearchText(entry);
       const card = entry.card || {};
       const colours = card.color_identity || card.colors || [];
       const availability = filters.availability === "all" ||
@@ -764,14 +769,22 @@ function renderCollection() {
         : "No cards match the current search and filters.")
       : "Nothing saved yet — find a card and add it to the collection, or import a list.";
   }
-  ui.collGrid.innerHTML = entries.map((entry) => `
-    <figure class="coll-card" data-id="${escapeHtml(entry.id)}" tabindex="0">
-      ${thumbHtml(entry, `×${entry.quantity}`,
-        `<button class="drop" data-drop="${escapeHtml(entry.id)}" title="Remove one copy">−</button>`)}
-      ${locationChips(entry)}
-    </figure>`).join("");
-  wireTiles(ui.collGrid, (id) => openCardById(id));
-  syncCardSelection("collection");
+  state.collectionVisibleIds = entries.map(entry => entry.id);
+  if (!state.collectionWindow) {
+    state.collectionWindow = new CollectionWindow(ui.collGrid, collectionTileHtml, () => {
+      wireTiles(ui.collGrid, (id) => openCardById(id));
+      syncCardSelection("collection");
+    });
+  }
+  state.collectionWindow.setEntries(entries);
+}
+
+function collectionTileHtml(entry) {
+  return `<figure class="coll-card" data-id="${escapeHtml(entry.id)}" tabindex="0">
+    ${thumbHtml(entry, `×${entry.quantity}`,
+      `<button class="drop" data-drop="${escapeHtml(entry.id)}" title="Remove one copy">−</button>`)}
+    ${locationChips(entry)}
+  </figure>`;
 }
 
 function renderWishlist() {
@@ -1356,6 +1369,8 @@ function openProxyList() {
 /** Shared tile behaviour: open the card, drop a copy, or jump to a deck. */
 function wireTiles(root, onOpen) {
   root.querySelectorAll(".coll-card").forEach((node) => {
+    if (node.dataset.tileWired) return;
+    node.dataset.tileWired = "true";
     node.addEventListener("click", (event) => {
       const target = event.target;
       if (target.dataset.drop || target.dataset.wishDrop || target.dataset.deck || target.dataset.step) return;
@@ -1375,12 +1390,16 @@ function wireTiles(root, onOpen) {
     });
   });
   root.querySelectorAll("[data-drop]").forEach((node) => {
+    if (node.dataset.tileWired) return;
+    node.dataset.tileWired = "true";
     node.addEventListener("click", (event) => {
       event.stopPropagation();
       removeFromCollection(node.dataset.drop);
     });
   });
   root.querySelectorAll(".loc.deck").forEach((node) => {
+    if (node.dataset.tileWired) return;
+    node.dataset.tileWired = "true";
     node.addEventListener("click", (event) => {
       event.stopPropagation();
       openDeck(node.dataset.deck);

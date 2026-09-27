@@ -67,7 +67,7 @@ function initCardSelections() {
       event.preventDefault();
       event.stopImmediatePropagation();
       if (selectionBusy) return;
-      scope.selection.toggle(tile.dataset.id, selectionTiles(scope).map(node => node.dataset.id), event.shiftKey);
+      scope.selection.toggle(tile.dataset.id, selectionIds(scope), event.shiftKey);
       scope.confirmRemove = false;
       hideCardPreview();
       syncCardSelection(kind);
@@ -79,7 +79,7 @@ function initCardSelections() {
         event.preventDefault();
         event.stopImmediatePropagation();
         if (selectionBusy) return;
-        scope.selection.toggle(tile.dataset.id, selectionTiles(scope).map(node => node.dataset.id), event.shiftKey);
+        scope.selection.toggle(tile.dataset.id, selectionIds(scope), event.shiftKey);
         scope.confirmRemove = false;
         syncCardSelection(kind);
       } else if (event.key === "Enter" && kind === "deck") {
@@ -100,12 +100,17 @@ function selectionTiles(scope) {
   return [...scope.root.querySelectorAll(".coll-card, .stack-card")];
 }
 
+function selectionIds(scope) {
+  return scope.kind === "collection" && state.collectionVisibleIds
+    ? state.collectionVisibleIds : selectionTiles(scope).map(tile => tile.dataset.id);
+}
+
 function syncCardSelection(kind) {
   const scope = cardSelections[kind];
   if (!scope) return;
   const { selection, bar, root } = scope;
   const tiles = selectionTiles(scope);
-  selection.retain(tiles.map(node => node.dataset.id));
+  selection.retain(selectionIds(scope));
   root.classList.toggle("selecting-cards", selection.active);
   tiles.forEach(tile => {
     let button = tile.querySelector(".card-select");
@@ -160,7 +165,7 @@ function selectionAction(scope, action) {
   if (action === "mode") {
     if (selection.active) selection.clear(); else selection.active = true;
   } else if (action === "all") {
-    selection.ids = new Set(selectionTiles(scope).map(tile => tile.dataset.id));
+    selection.ids = new Set(selectionIds(scope));
   } else if (action === "clear") {
     selection.ids.clear(); selection.anchor = null;
   } else if (action === "export") {
@@ -183,7 +188,7 @@ async function runSelectionBatch(scope, action) {
   const ids = [...scope.selection.ids];
   const deckId = scope.kind === "deck" ? state.deckId : scope.bar.querySelector("[data-selection-deck]").value;
   const zone = action === "add" ? scope.bar.querySelector("[data-selection-zone]").value : action;
-  const url = action === "add" ? "/api/decks/add" : action === "remove" ? "/api/decks/remove" : "/api/decks/move";
+  const batchAction = action === "add" || action === "remove" ? action : "move";
   const result = scope.bar.querySelector(".selection-result");
   const destination = deckName(deckId);
   // Capture the destination before any awaits: navigation must never redirect a batch.
@@ -192,16 +197,16 @@ async function runSelectionBatch(scope, action) {
   Object.keys(cardSelections).forEach(syncCardSelection);
   let completed = 0;
   try {
-    for (const id of ids) {
-      result.textContent = `Updating ${destination}: ${completed} of ${ids.length} completed…`;
-      const data = await getJson(url, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deck_id: deckId, card_id: id, quantity: 1, zone, all: action === "remove" }),
-      });
-      scope.selection.ids.delete(id);
-      completed++;
-      applyPatch(data);
-    }
+    result.textContent = `Updating ${ids.length} selected printings in ${destination}…`;
+    const data = await getJson("/api/decks/batch", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deck_id: deckId, card_ids: ids, action: batchAction,
+        zone: action === "remove" ? "main" : zone }),
+    });
+    (data.completed_ids || []).forEach(id => scope.selection.ids.delete(id));
+    completed = (data.completed_ids || []).length;
+    applyPatch(data);
+    if (data.batch_error) throw new Error(data.batch_error);
     result.textContent = `${completed} selected printing${completed === 1 ? "" : "s"} updated in ${destination}.`;
     setStatus(result.textContent);
   } catch (error) {

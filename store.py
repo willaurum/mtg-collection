@@ -234,6 +234,19 @@ def wishlist_remove(user_id, card_id, drop_all=False):
     return card_id
 
 
+def wishlist_signature(user_id):
+    """Only dependencies that affect the wishlist's displayed contents."""
+    return [tuple(row) for row in db.connect().execute(
+        """SELECT w.card_id, w.quantity, w.added, k.data
+             FROM wishlist w JOIN cards k ON k.id = w.card_id WHERE w.user_id = ?
+           UNION ALL
+           SELECT dc.card_id, dc.quantity, d.id || d.name, k.data
+             FROM deck_cards dc JOIN decks d ON d.id = dc.deck_id
+             JOIN cards k ON k.id = dc.card_id
+            WHERE d.user_id = ? AND dc.proxy = 1 AND dc.zone = 'main'
+           ORDER BY 1, 2, 3, 4""", (user_id, user_id))]
+
+
 def wishlist(user_id, conn=None):
     """Merge manual wishes and proxy requirements without double-counting overlap."""
     conn = conn or db.connect()
@@ -250,6 +263,16 @@ def wishlist(user_id, conn=None):
             ORDER BY k.name COLLATE NOCASE""",
         (user_id, user_id),
     ).fetchall()
+    deck_rows = conn.execute(
+        """SELECT dc.card_id, d.id, d.name, dc.quantity FROM deck_cards dc
+             JOIN decks d ON d.id = dc.deck_id
+            WHERE d.user_id = ? AND dc.proxy = 1
+              AND dc.zone = 'main' ORDER BY d.name COLLATE NOCASE""",
+        (user_id,),
+    ).fetchall()
+    decks_by_card = {}
+    for item in deck_rows:
+        decks_by_card.setdefault(item["card_id"], []).append(item)
     result = []
     for row in rows:
         manual = int(row["manual_quantity"] or 0)
@@ -257,13 +280,7 @@ def wishlist(user_id, conn=None):
         if not manual and not proxy:
             continue
         card = card_json(row)
-        deck_rows = conn.execute(
-            """SELECT d.id, d.name, dc.quantity FROM deck_cards dc
-                 JOIN decks d ON d.id = dc.deck_id
-                WHERE d.user_id = ? AND dc.card_id = ? AND dc.proxy = 1
-                  AND dc.zone = 'main' ORDER BY d.name COLLATE NOCASE""",
-            (user_id, row["card_id"]),
-        ).fetchall()
+        deck_rows = decks_by_card.get(row["card_id"], [])
         result.append({
             "id": row["card_id"], "name": card.get("name"), "card": card,
             "set": card.get("set"), "collector_number": card.get("collector_number"),
@@ -948,7 +965,7 @@ def unowned_deck_cards(user_id, deck_id):
     return [item for item in needed.values() if item["quantity"] > 0]
 
 
-def patch(user_id, entry_ids=(), deck_ids=()):
+def patch(user_id, entry_ids=(), deck_ids=(), wishlist_changed=True):
     """The small, self-consistent state change returned after a mutation."""
     conn = db.connect()
     entries = [item for card_id in dict.fromkeys(entry_ids)
@@ -956,8 +973,10 @@ def patch(user_id, entry_ids=(), deck_ids=()):
     decks = [deck for deck_id in dict.fromkeys(deck_ids)
              if (deck := deck_state(user_id, deck_id, conn)) is not None]
     record_price_snapshot(user_id, conn)
-    return {"entries": entries, "decks": decks, "wishlist": wishlist(user_id, conn),
-            "summary": summary(user_id, conn)}
+    payload = {"entries": entries, "decks": decks, "summary": summary(user_id, conn)}
+    if wishlist_changed:
+        payload["wishlist"] = wishlist(user_id, conn)
+    return payload
 
 def library(user_id):
     """One consistent snapshot: collection, decks, and who holds what."""
