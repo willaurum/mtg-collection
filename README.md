@@ -59,7 +59,7 @@ That produces `dist\MTGCardViewer.exe`. The spec bundles `templates/` and
 | Save a card | **Add to collection** under the details — saves the printing you are looking at |
 | Import a list | **Import** in the rail — paste a decklist or CSV, or pick a file; preview before it writes |
 | See what you own | **Collection** in the rail; search rules text, sort by name/newest/copies/value/set, toggle unused cards, or switch between card grid and compact list |
-| Find where a new card belongs | **Collection manager** in the rail; look up a card, choose its printing, and see the two nearby cards on either side in alphabetical order before confirming Add |
+| Find where a new card belongs | **Collection manager** in the rail; look up a card, choose its printing, and see the two nearby cards on either side in alphabetical order before confirming Add. Cards in decks are excluded from the neighbors |
 | Preview a collection card | Hover it, or focus it with the keyboard; click or press **Enter** to open it |
 | Back up or move your library | **Export profile** writes your cards and decks to a JSON file; **Import profile** can merge one in or replace your current library with it |
 | Remove a copy | **Remove one** on the card, or the **−** badge on a collection tile |

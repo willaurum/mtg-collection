@@ -922,15 +922,18 @@ function collectionComparator(sort) {
   return byName;
 }
 
-/** Neighbours in the Collection's Name order, including printing tie breaks. */
-function collectionPlacement(entries, card) {
-  const ordered = [...entries].sort(collectionComparator("name"));
-  const existing = ordered.find((entry) => entry.id === card.id) || null;
+/** Neighbours in Name order among printings absent from all decks. */
+function collectionPlacement(entries, card, decks = []) {
+  const existing = entries.find((entry) => entry.id === card.id) || null;
+  const deckCardIds = new Set(decks.flatMap((deck) =>
+    (deck.cards || []).map((line) => line.card_id)));
+  const ordered = entries.filter((entry) =>
+    entry.id !== card.id && !entry.allocated && !deckCardIds.has(entry.id));
   const candidate = existing || {
     id: card.id, name: card.name || "", set: card.set || "",
     collector_number: card.collector_number || "",
   };
-  if (!existing) ordered.push(candidate);
+  ordered.push(candidate);
   ordered.sort(collectionComparator("name"));
   const index = ordered.findIndex((entry) => entry.id === card.id);
   return {
@@ -1057,11 +1060,12 @@ function previewManagerPlacement() {
   const card = state.managerCard;
   if (!card) return;
   state.managerPendingCard = card;
-  const placement = collectionPlacement(state.library.entries || [], card);
+  const placement = collectionPlacement(
+    state.library.entries || [], card, state.library.decks || []);
   ui.managerPlacementTitle.textContent = "Alphabetical position";
   ui.managerPlacementNote.textContent = placement.existing
-    ? `This printing is already in your collection (${placement.existing.quantity} owned). Adding will increase its count.`
-    : "This printing will go between these cards in the Collection's Name order.";
+    ? `You own ${placement.existing.quantity} of this printing. Adding will increase its count. Nearby cards in decks are excluded.`
+    : "This printing will go between these cards in Name order. Cards in decks are excluded.";
   const row = (entry, kind) => `<li class="${kind}"><span>${escapeHtml(managerEntryLabel(entry))}</span>` +
     (kind === "current" ? "<b>Card to add</b>" : "") + "</li>";
   ui.managerPlacementList.innerHTML =

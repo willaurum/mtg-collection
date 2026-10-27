@@ -41,4 +41,24 @@ result = context.collectionPlacement([], { id: 'first', name: 'Forest' });
 assert.equal(result.before.length, 0);
 assert.equal(result.after.length, 0);
 
+const withDeckCards = entries.map((entry) => ({
+  ...entry, allocated: entry.id === 'b' || entry.id === 'l' ? 1 : 0,
+}));
+result = context.collectionPlacement(withDeckCards, {
+  id: 'new', name: 'Counterspell', set: '2xm', collector_number: '45',
+});
+assert.deepEqual(Array.from(result.before, (entry) => entry.id), ['a']);
+assert.deepEqual(Array.from(result.after, (entry) => entry.id), ['z']);
+
+result = context.collectionPlacement(withDeckCards, { id: 'l', name: 'Lightning Bolt' });
+assert.equal(result.existing.allocated, 1, 'the selected printing should still show its owned count');
+assert.deepEqual(Array.from(result.before, (entry) => entry.id), ['a']);
+assert.deepEqual(Array.from(result.after, (entry) => entry.id), ['z']);
+
+result = context.collectionPlacement(entries, {
+  id: 'new', name: 'Counterspell', set: '2xm', collector_number: '45',
+}, [{ cards: [{ card_id: 'b', zone: 'maybeboard', proxy: false }] }]);
+assert.deepEqual(Array.from(result.before, (entry) => entry.id), ['a']);
+assert.deepEqual(Array.from(result.after, (entry) => entry.id), ['l', 'z']);
+
 console.log('Collection manager placement checks passed.');
