@@ -79,6 +79,9 @@
       <svg class="ico"><use href="#i-grid"/></svg><span>Collection</span>
       <em class="count" id="collCount">0</em>
     </button>
+    <button class="nav" id="collectionManagerBtn" data-view="manager">
+      <svg class="ico"><use href="#i-plus"/></svg><span>Collection manager</span>
+    </button>
     <button class="nav" id="deckMenuBtn" data-view="decks">
       <svg class="ico"><use href="#i-decks"/></svg><span>Decks</span>
     </button>
@@ -253,6 +256,47 @@
       <div class="view-body">
         <div class="wishlist-groups" id="wishlistGrid"></div>
         <p class="empty" id="wishlistEmpty" hidden>No cards needed yet. Add one from the card viewer or add a proxy to a deck.</p>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------- collection -->
+    <section class="view" id="collectionManagerPanel" hidden>
+      <header class="view-head">
+        <div><h1>Collection manager</h1><p class="sub">Find a printing and see where it belongs alphabetically before adding it.</p></div>
+      </header>
+      <div class="view-body manager-body">
+        <form class="manager-search" id="managerSearchForm" autocomplete="off">
+          <label for="managerSearch">Card name</label>
+          <div class="manager-search-row">
+            <div class="manager-search-wrap">
+              <input id="managerSearch" class="mini-input" type="search" placeholder="Search Scryfall…" spellcheck="false" aria-autocomplete="list" aria-controls="managerSuggestions">
+              <ul class="suggestions" id="managerSuggestions" hidden></ul>
+            </div>
+            <button class="btn" type="submit">Look up card</button>
+          </div>
+        </form>
+        <p class="sub" id="managerStatus" role="status" aria-live="polite">Search for a card to get started.</p>
+        <section class="manager-card" id="managerCard" hidden>
+          <img id="managerArt" alt="">
+          <div class="manager-card-details">
+            <h2 id="managerName"></h2>
+            <p class="sub" id="managerType"></p>
+            <p id="managerRules"></p>
+            <label for="managerPrintings">Printing</label>
+            <select class="view-select" id="managerPrintings"></select>
+            <p class="sub" id="managerOwned"></p>
+            <button class="btn primary" id="managerAddBtn" type="button">Add to collection</button>
+          </div>
+        </section>
+        <section class="manager-placement" id="managerPlacement" aria-live="polite" hidden>
+          <h2 id="managerPlacementTitle">Alphabetical position</h2>
+          <p class="sub" id="managerPlacementNote"></p>
+          <ol id="managerPlacementList"></ol>
+          <div class="manager-placement-actions">
+            <button class="btn primary" id="managerConfirmBtn" type="button">Confirm add</button>
+            <button class="btn quiet" id="managerCancelBtn" type="button">Cancel</button>
+          </div>
+        </section>
       </div>
     </section>
 

@@ -1,4 +1,5 @@
 1. Multiplayer
+2. Cards with different printings should all appear in the same "Number owned" section.
 
 Finished:
 Multiselect in collection and deck views

@@ -39,6 +39,16 @@ const ui = {
   printings: el("printings"), scryfallBtn: el("scryfallBtn"),
   addBtn: el("addBtn"), removeBtn: el("removeBtn"), wishlistAddBtn: el("wishlistAddBtn"), ownedLabel: el("ownedLabel"),
   viewCollectionBtn: el("viewCollectionBtn"), collCount: el("collCount"),
+  collectionManagerBtn: el("collectionManagerBtn"), collectionManagerPanel: el("collectionManagerPanel"),
+  managerSearchForm: el("managerSearchForm"), managerSearch: el("managerSearch"),
+  managerSuggestions: el("managerSuggestions"), managerStatus: el("managerStatus"),
+  managerCard: el("managerCard"), managerArt: el("managerArt"),
+  managerName: el("managerName"), managerType: el("managerType"),
+  managerRules: el("managerRules"), managerPrintings: el("managerPrintings"),
+  managerOwned: el("managerOwned"), managerAddBtn: el("managerAddBtn"),
+  managerPlacement: el("managerPlacement"), managerPlacementTitle: el("managerPlacementTitle"),
+  managerPlacementNote: el("managerPlacementNote"), managerPlacementList: el("managerPlacementList"),
+  managerConfirmBtn: el("managerConfirmBtn"), managerCancelBtn: el("managerCancelBtn"),
   wishlistBtn: el("wishlistBtn"), wishlistCount: el("wishlistCount"),
   wishlistPanel: el("wishlistPanel"), wishlistGrid: el("wishlistGrid"),
   wishlistEmpty: el("wishlistEmpty"), wishlistSummary: el("wishlistSummary"),
@@ -143,6 +153,14 @@ const state = {
   deckSuggestTimer: null,
   deckSuggestSeq: 0,
   deckImportToken: null,
+  managerCard: null,
+  managerPrintings: [],
+  managerLookupSeq: 0,
+  managerSuggestSeq: 0,
+  managerSuggestTimer: null,
+  managerSuggestions: [],
+  managerSuggestionIndex: -1,
+  managerPendingCard: null,
 };
 
 ui.collectionSort.value = state.collectionSort;
@@ -486,6 +504,7 @@ function applyLibrary(data) {
   applySummary(data.summary);
   renderDeckList();
   renderOwned();
+  if (!ui.collectionManagerPanel.hidden && state.managerCard) renderManagerCard();
   if (!ui.collectionPanel.hidden) renderCollection();
   if (!ui.wishlistPanel.hidden) renderWishlist();
   if (!ui.deckPanel.hidden) renderDeckPanel();
@@ -572,6 +591,7 @@ function applyPatch(data) {
   applySummary(data.summary);
   renderDeckList();
   renderOwned();
+  if (!ui.collectionManagerPanel.hidden && state.managerCard) renderManagerCard();
   if (!ui.collectionPanel.hidden) renderCollection();
   if (!ui.wishlistPanel.hidden) renderWishlist();
   if (!ui.deckMenuPanel.hidden) renderDeckList();
@@ -899,6 +919,174 @@ function collectionComparator(sort) {
   if (sort === "value") return (a, b) => cardValue(b) - cardValue(a) || byName(a, b);
   if (sort === "set") return (a, b) => (a.set_name || a.set || "").localeCompare(b.set_name || b.set || "") || byName(a, b);
   return byName;
+}
+
+/** Neighbours in the Collection's Name order, including printing tie breaks. */
+function collectionPlacement(entries, card) {
+  const ordered = [...entries].sort(collectionComparator("name"));
+  const existing = ordered.find((entry) => entry.id === card.id) || null;
+  const candidate = existing || {
+    id: card.id, name: card.name || "", set: card.set || "",
+    collector_number: card.collector_number || "",
+  };
+  if (!existing) ordered.push(candidate);
+  ordered.sort(collectionComparator("name"));
+  const index = ordered.findIndex((entry) => entry.id === card.id);
+  return {
+    before: ordered.slice(Math.max(0, index - 2), index),
+    after: ordered.slice(index + 1, index + 3),
+    existing,
+  };
+}
+
+function managerEntryLabel(entry) {
+  const printing = [entry.set?.toUpperCase(), entry.collector_number].filter(Boolean).join(" #");
+  return `${entry.name || "Unknown card"}${printing ? ` · ${printing}` : ""}`;
+}
+
+function hideManagerSuggestions() {
+  ui.managerSuggestions.hidden = true;
+  ui.managerSuggestions.innerHTML = "";
+  state.managerSuggestions = [];
+  state.managerSuggestionIndex = -1;
+}
+
+function showManagerSuggestions(names) {
+  if (!names.length) return hideManagerSuggestions();
+  state.managerSuggestions = names;
+  state.managerSuggestionIndex = -1;
+  ui.managerSuggestions.innerHTML = names.map((name) => `<li>${escapeHtml(name)}</li>`).join("");
+  [...ui.managerSuggestions.children].forEach((item, index) => {
+    item.addEventListener("mouseenter", () => highlightManagerSuggestion(index));
+    item.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+      ui.managerSearch.value = names[index];
+      hideManagerSuggestions();
+      lookupManagerCard();
+    });
+  });
+  ui.managerSuggestions.hidden = false;
+}
+
+function highlightManagerSuggestion(index) {
+  state.managerSuggestionIndex = index;
+  [...ui.managerSuggestions.children].forEach((item, i) =>
+    item.classList.toggle("active", i === index));
+}
+
+function scheduleManagerSuggestions() {
+  clearTimeout(state.managerSuggestTimer);
+  state.managerSuggestSeq++;
+  hideManagerSuggestions();
+  const query = ui.managerSearch.value.trim();
+  if (query.length < 2) return;
+  const seq = state.managerSuggestSeq;
+  state.managerSuggestTimer = setTimeout(async () => {
+    try {
+      const names = await getJson(`/api/autocomplete?q=${encodeURIComponent(query)}`);
+      if (seq === state.managerSuggestSeq && query === ui.managerSearch.value.trim()) {
+        showManagerSuggestions(names);
+      }
+    } catch { /* suggestions are optional */ }
+  }, SUGGEST_DELAY);
+}
+
+async function lookupManagerCard() {
+  const name = ui.managerSearch.value.trim();
+  if (!name) return ui.managerStatus.textContent = "Type a card name first.";
+  hideManagerSuggestions();
+  ui.managerCard.hidden = true;
+  ui.managerPlacement.hidden = true;
+  state.managerCard = null;
+  state.managerPendingCard = null;
+  const seq = ++state.managerLookupSeq;
+  ui.managerStatus.textContent = `Looking up ${name}…`;
+  try {
+    const card = await getJson(`/api/card?name=${encodeURIComponent(name)}`);
+    if (seq !== state.managerLookupSeq) return;
+    state.managerCard = card;
+    state.managerPrintings = [card];
+    renderManagerCard();
+    ui.managerStatus.textContent = "Choose the printing you want, then select Add to collection.";
+    if (!card.prints_search_uri) return;
+    try {
+      const printings = await getJson(`/api/printings?uri=${encodeURIComponent(card.prints_search_uri)}`);
+      if (seq === state.managerLookupSeq && Array.isArray(printings) && printings.length) {
+        state.managerPrintings = printings.some((printing) => printing.id === card.id)
+          ? printings : [card, ...printings];
+        renderManagerPrintings();
+      }
+    } catch { /* the searched printing remains available */ }
+  } catch (error) {
+    if (seq !== state.managerLookupSeq) return;
+    const suggestions = error.suggestions?.length
+      ? ` Did you mean ${error.suggestions.slice(0, 3).join(", ")}?` : "";
+    ui.managerStatus.textContent = error.message + suggestions;
+  }
+}
+
+function renderManagerPrintings() {
+  const selectedId = state.managerCard?.id;
+  ui.managerPrintings.innerHTML = state.managerPrintings.map((card, index) =>
+    `<option value="${index}">${escapeHtml(`${card.released_at?.slice(0, 4) || "?"} · ` +
+      `${(card.set || "").toUpperCase()} #${card.collector_number || "?"}`)}</option>`).join("");
+  const selectedIndex = state.managerPrintings.findIndex((card) => card.id === selectedId);
+  ui.managerPrintings.value = String(Math.max(0, selectedIndex));
+  ui.managerPrintings.disabled = state.managerPrintings.length < 2;
+}
+
+function renderManagerCard() {
+  const card = state.managerCard;
+  if (!card) return;
+  const art = imageUrl(card, 0);
+  ui.managerArt.src = art ? `/img?u=${encodeURIComponent(art)}` : "";
+  ui.managerArt.alt = card.name || "";
+  ui.managerName.textContent = card.name || "Unknown card";
+  ui.managerType.textContent = frontFace(card).type_line || card.type_line || "";
+  ui.managerRules.textContent = frontFace(card).oracle_text || card.oracle_text || "No rules text.";
+  const owned = state.entryById.get(card.id)?.quantity || 0;
+  ui.managerOwned.textContent = owned
+    ? `You already own ${owned} of this printing.` : "You do not own this printing yet.";
+  ui.managerCard.hidden = false;
+  renderManagerPrintings();
+}
+
+function previewManagerPlacement() {
+  const card = state.managerCard;
+  if (!card) return;
+  state.managerPendingCard = card;
+  const placement = collectionPlacement(state.library.entries || [], card);
+  ui.managerPlacementTitle.textContent = "Alphabetical position";
+  ui.managerPlacementNote.textContent = placement.existing
+    ? `This printing is already in your collection (${placement.existing.quantity} owned). Adding will increase its count.`
+    : "This printing will go between these cards in the Collection's Name order.";
+  const row = (entry, kind) => `<li class="${kind}"><span>${escapeHtml(managerEntryLabel(entry))}</span>` +
+    (kind === "current" ? "<b>Card to add</b>" : "") + "</li>";
+  ui.managerPlacementList.innerHTML =
+    (placement.before.length ? placement.before.map((entry) => row(entry, "neighbor")).join("")
+      : '<li class="boundary">Start of collection</li>') +
+    row(card, "current") +
+    (placement.after.length ? placement.after.map((entry) => row(entry, "neighbor")).join("")
+      : '<li class="boundary">End of collection</li>');
+  ui.managerConfirmBtn.disabled = false;
+  ui.managerPlacement.hidden = false;
+  ui.managerPlacement.scrollIntoView({ block: "nearest" });
+}
+
+async function confirmManagerAdd() {
+  const card = state.managerPendingCard;
+  if (!card) return;
+  ui.managerConfirmBtn.disabled = true;
+  const data = await mutate("/api/collection/add", { card },
+    (result) => `Added ${result.entry.name} — you now hold ${result.entry.quantity}.`);
+  if (data) {
+    state.managerPendingCard = null;
+    ui.managerPlacement.hidden = true;
+    ui.managerStatus.textContent = `${card.name} added. Search for another card whenever you're ready.`;
+    renderManagerCard();
+  } else {
+    ui.managerConfirmBtn.disabled = false;
+  }
 }
 
 function setCollectionView(view) {
@@ -1955,6 +2143,7 @@ const NAV = {
   settings: () => ui.settingsBtn,
   card: () => ui.navCard,
   collection: () => ui.viewCollectionBtn,
+  manager: () => ui.collectionManagerBtn,
   wishlist: () => ui.wishlistBtn,
   import: () => ui.importBtn,
   decks: () => ui.deckMenuBtn,
@@ -1967,7 +2156,7 @@ function showView(panel, navKey) {
   if (navKey !== "settings") el("passwordForm").reset();
   disarmDelete();
   hideCardPreview();
-  [ui.cardPanel, ui.collectionPanel, ui.wishlistPanel, ui.deckMenuPanel, ui.deckPanel, ui.importPanel, ui.settingsPanel]
+  [ui.cardPanel, ui.collectionPanel, ui.collectionManagerPanel, ui.wishlistPanel, ui.deckMenuPanel, ui.deckPanel, ui.importPanel, ui.settingsPanel]
     .forEach((node) => { node.hidden = node !== panel; });
   Object.entries(NAV).forEach(([key, node]) =>
     node().classList.toggle("active", key === navKey));
@@ -1987,6 +2176,14 @@ function showCollectionView() {
   showView(ui.collectionPanel, "collection");
   renderDeckList();
   renderCollection();
+}
+
+function showCollectionManagerView() {
+  state.deckId = null;
+  state.cardSeq++;
+  showView(ui.collectionManagerPanel, "manager");
+  renderDeckList();
+  ui.managerSearch.focus();
 }
 
 function showWishlistView() {
@@ -2128,6 +2325,7 @@ function commandChoices() {
       ui.search.focus(); ui.search.select();
     } },
     { label: "Open Collection", detail: "Browse cards you own", run: showCollectionView },
+    { label: "Open Collection manager", detail: "Add cards with alphabetical placement", run: showCollectionManagerView },
     { label: "Filter Collection", detail: "Open Collection and focus its filter", run: () => {
       showCollectionView(); ui.collectionFilter.focus();
     } },
@@ -2510,6 +2708,50 @@ ui.addBtn.addEventListener("click", addToCollection);
 ui.wishlistAddBtn.addEventListener("click", addToWishlist);
 ui.removeBtn.addEventListener("click", () => state.card && removeFromCollection(state.card.id));
 ui.viewCollectionBtn.addEventListener("click", showCollectionView);
+ui.collectionManagerBtn.addEventListener("click", showCollectionManagerView);
+ui.managerSearchForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  if (state.managerSuggestionIndex >= 0) {
+    ui.managerSearch.value = state.managerSuggestions[state.managerSuggestionIndex];
+  }
+  lookupManagerCard();
+});
+ui.managerSearch.addEventListener("input", () => {
+  state.managerLookupSeq++;
+  state.managerPendingCard = null;
+  ui.managerPlacement.hidden = true;
+  ui.managerCard.hidden = true;
+  scheduleManagerSuggestions();
+});
+ui.managerSearch.addEventListener("keydown", (event) => {
+  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    if (!state.managerSuggestions.length) return;
+    event.preventDefault();
+    const direction = event.key === "ArrowDown" ? 1 : -1;
+    const count = state.managerSuggestions.length;
+    const next = state.managerSuggestionIndex === -1
+      ? (direction > 0 ? 0 : count - 1)
+      : (state.managerSuggestionIndex + direction + count) % count;
+    highlightManagerSuggestion(next);
+    ui.managerSuggestions.children[next].scrollIntoView({ block: "nearest" });
+  } else if (event.key === "Escape") hideManagerSuggestions();
+});
+ui.managerSearch.addEventListener("blur", () => setTimeout(hideManagerSuggestions, 120));
+ui.managerPrintings.addEventListener("change", () => {
+  const card = state.managerPrintings[Number(ui.managerPrintings.value)];
+  if (!card) return;
+  state.managerCard = card;
+  state.managerPendingCard = null;
+  ui.managerPlacement.hidden = true;
+  renderManagerCard();
+});
+ui.managerAddBtn.addEventListener("click", previewManagerPlacement);
+ui.managerConfirmBtn.addEventListener("click", confirmManagerAdd);
+ui.managerCancelBtn.addEventListener("click", () => {
+  state.managerPendingCard = null;
+  ui.managerPlacement.hidden = true;
+  ui.managerAddBtn.focus();
+});
 ui.wishlistBtn.addEventListener("click", showWishlistView);
 ui.wishlistExportBtn.addEventListener("click", exportWishlist);
 ui.wishlistSort.addEventListener("change", setWishlistSort);

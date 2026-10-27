@@ -517,6 +517,37 @@ kbd {
 
 .view-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 20px 26px 26px; }
 
+/* -------------------------------------------------- collection manager */
+
+.manager-body { display: grid; align-content: start; gap: 15px; }
+.manager-search { display: grid; gap: 7px; max-width: 680px; }
+.manager-search label, .manager-card-details label {
+  color: var(--faint); font: 600 calc(10px * var(--text-scale, 1)) var(--sans);
+  letter-spacing: .1em; text-transform: uppercase;
+}
+.manager-search-row { display: flex; align-items: start; gap: 8px; }
+.manager-search-wrap { position: relative; flex: 1; min-width: 0; }
+.manager-search-wrap .mini-input { width: 100%; margin: 0; padding: 9px 11px; }
+.manager-search-wrap .suggestions { z-index: 65; }
+.manager-search-row > .btn { min-height: 36px; white-space: nowrap; }
+.manager-card { display: grid; grid-template-columns: minmax(180px, 245px) minmax(0, 1fr); gap: 24px; align-items: start; max-width: 900px; }
+.manager-card > img { display: block; width: 100%; aspect-ratio: 488 / 680; object-fit: cover; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--sunken); }
+.manager-card-details { display: grid; justify-items: start; gap: 9px; min-width: 0; }
+.manager-card-details h2 { font: 500 calc(24px * var(--text-scale, 1)) var(--display); }
+.manager-card-details > p { margin: 0; }
+.manager-card-details #managerRules { max-width: 60ch; white-space: pre-line; line-height: 1.55; color: var(--text); }
+.manager-card-details #managerOwned { color: var(--gold); }
+.manager-card-details select { max-width: 100%; }
+.manager-placement { max-width: 900px; padding: 16px 18px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--sunken); }
+.manager-placement h2 { font: 500 calc(18px * var(--text-scale, 1)) var(--display); }
+.manager-placement > .sub { margin: 5px 0 12px; }
+.manager-placement ol { display: grid; gap: 3px; margin: 0 0 14px; padding: 0; list-style: none; }
+.manager-placement li { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 34px; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--r-sm); color: var(--dim); }
+.manager-placement li.current { border-color: var(--bronze); background: var(--gold-soft); color: var(--gold); }
+.manager-placement li.current b { flex: 0 0 auto; font: 600 calc(10px * var(--text-scale, 1)) var(--sans); }
+.manager-placement li.boundary { border-style: dashed; color: var(--faint); font-style: italic; }
+.manager-placement-actions { display: flex; gap: 8px; }
+
 /* ----------------------------------------------------------- the card */
 
 #cardPanel { overflow-y: auto; padding: 24px 26px 28px; }
@@ -1500,6 +1531,8 @@ kbd {
 
 @media (max-width: 700px) {
   .view-head { flex-wrap: wrap; }
+  .manager-card { grid-template-columns: 1fr; }
+  .manager-card > img { max-width: 245px; }
   .wishlist-group-head { align-items: flex-start; flex-direction: column; }
   .collection-toolbar { width: 100%; }
   .collection-search-row .collection-filter { width: auto; flex: 1; }
