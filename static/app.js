@@ -45,7 +45,8 @@ const ui = {
   managerCard: el("managerCard"), managerArt: el("managerArt"),
   managerName: el("managerName"), managerType: el("managerType"),
   managerRules: el("managerRules"), managerPrintings: el("managerPrintings"),
-  managerOwned: el("managerOwned"), managerAddBtn: el("managerAddBtn"),
+  managerPrices: el("managerPrices"), managerOwned: el("managerOwned"),
+  managerAddBtn: el("managerAddBtn"),
   managerPlacement: el("managerPlacement"), managerPlacementTitle: el("managerPlacementTitle"),
   managerPlacementNote: el("managerPlacementNote"), managerPlacementList: el("managerPlacementList"),
   managerConfirmBtn: el("managerConfirmBtn"), managerCancelBtn: el("managerCancelBtn"),
@@ -1044,6 +1045,7 @@ function renderManagerCard() {
   ui.managerName.textContent = card.name || "Unknown card";
   ui.managerType.textContent = frontFace(card).type_line || card.type_line || "";
   ui.managerRules.textContent = frontFace(card).oracle_text || card.oracle_text || "No rules text.";
+  ui.managerPrices.innerHTML = priceChipsHtml(card);
   const owned = state.entryById.get(card.id)?.quantity || 0;
   ui.managerOwned.textContent = owned
     ? `You already own ${owned} of this printing.` : "You do not own this printing yet.";

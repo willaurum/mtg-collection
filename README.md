@@ -2,6 +2,9 @@
 
 python desktop_app.py --server http://100.116.99.123:8000
 
+git -C /srv/homelab/apps/mtg/app pull --ff-only origin main
+sudo systemctl restart mtgviewer
+
 A desktop app that looks up any Magic: The Gathering card on
 [Scryfall](https://scryfall.com/docs/api) and displays it — art, rules text,
 printings, prices, and format legality.
