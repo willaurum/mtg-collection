@@ -2934,7 +2934,7 @@ async function connectDesktopImageCache() {
   startWhenReady();
 }
 
-document.addEventListener("pywebviewready", connectDesktopImageCache, { once: true });
+window.addEventListener("pywebviewready", connectDesktopImageCache, { once: true });
 if (window.pywebview?.api) connectDesktopImageCache();
 setTimeout(startWhenReady, 150);
 
