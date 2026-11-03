@@ -446,21 +446,116 @@ body.busy .progress { opacity: 1; }
 :root[data-theme="katrine"] .credit { color: var(--faint); }
 :root[data-theme="katrine"] ::-webkit-scrollbar-thumb { background: #364363; }
 :root[data-theme="katrine"] ::-webkit-scrollbar-thumb:hover { background: #526385; }
-:root[data-theme="eli"] {
-  --bg: #ff3b00; --rail: #ccff00; --surface: #ff00b7;
-  --elevate: #00ffff; --sunken: #ffea00;
-  --line: #ff3b00; --line-2: #6200ff;
-  --text: #19005c; --dim: #850015; --faint: #0d4700;
-  --gold: #3300ff; --gold-soft: #39ff14;
-  --leaf: #00ff48; --danger: #c00000;
-  --brown: #ff6a00; --brown-hi: #ff00ff; --bronze: #3300ff;
+:root[data-theme="ty"] {
+  --bg: #101821;
+  --rail: #17232e;
+  --surface: #1d2a36;
+  --elevate: #293948;
+  --sunken: #111b26;
+  --line: rgba(159, 187, 211, .19);
+  --line-2: rgba(166, 197, 222, .38);
+  --text: #ecf1f5;
+  --dim: #b6c4d0;
+  --faint: #8d9eae;
+  --gold: #a8d2ee;
+  --gold-soft: rgba(118, 174, 217, .16);
+  --gold-border: rgba(168, 210, 238, .40);
+  --leaf: #9bc6dc;
+  --leaf-border: rgba(155, 198, 220, .40);
+  --danger: #ee8b95;
+  --brown: #315a7a;
+  --brown-hi: #47769a;
+  --bronze: #6896b7;
+  --scrollbar: #40576c;
+  --scrollbar-hover: #607d96;
 }
-:root[data-theme="eli"] .topbar { background: #00ff48; }
-:root[data-theme="eli"] .view-head { background: #ff6a00; }
-:root[data-theme="eli"] .settings-section { border: 3px dashed #6200ff; box-shadow: 6px 6px 0 #ccff00; }
-:root[data-theme="eli"] .settings-section:nth-of-type(even) { background: #ccff00; box-shadow: 6px 6px 0 #00ffff; }
-:root[data-theme="eli"] .btn.primary { background: #ff6a00; color: #19005c; border-color: #6200ff; }
-:root[data-theme="eli"] .credit { color: #850015; }
+:root[data-theme="ty"] .topbar { background: linear-gradient(100deg, #223447, #17232e 65%, #253542); }
+:root[data-theme="ty"] .view-head { background: linear-gradient(90deg, rgba(116, 166, 203, .13), transparent 75%); }
+:root[data-theme="ty"] .btn.primary { color: #f4faff; }
+:root[data-theme="ty"] .btn.primary:hover:not(:disabled) { background: linear-gradient(180deg, #4b7394, var(--brown)); border-color: var(--gold); }
+
+:root[data-theme="ethan"] {
+  --bg: #0c1018;
+  --rail: #121a28;
+  --surface: #192334;
+  --elevate: #222f43;
+  --sunken: #0d1524;
+  --line: rgba(102, 159, 222, .20);
+  --line-2: rgba(130, 185, 241, .39);
+  --text: #f1f4fa;
+  --dim: #bdc8d8;
+  --faint: #93a4ba;
+  --gold: #ffda61;
+  --gold-soft: rgba(255, 218, 97, .14);
+  --gold-border: rgba(255, 218, 97, .42);
+  --leaf: #70bdff;
+  --leaf-border: rgba(112, 189, 255, .40);
+  --danger: #f17685;
+  --brown: #104a9c;
+  --brown-hi: #1b71cb;
+  --bronze: #4a94db;
+  --scrollbar: #345776;
+  --scrollbar-hover: #527fa8;
+}
+:root[data-theme="ethan"] .topbar {
+  background: linear-gradient(105deg, #111827, #0d1421 55%, #12376d);
+  border-bottom-color: rgba(255, 218, 97, .43);
+}
+:root[data-theme="ethan"] .view-head { background: linear-gradient(90deg, rgba(25, 107, 210, .23), transparent 72%); }
+:root[data-theme="ethan"] .brand { color: var(--gold); }
+:root[data-theme="ethan"] .nav.active { box-shadow: inset 3px 0 0 var(--gold); }
+:root[data-theme="ethan"] .btn.primary { color: #fff9d6; }
+:root[data-theme="ethan"] .btn.primary:hover:not(:disabled) { background: linear-gradient(180deg, #226cb7, var(--brown)); border-color: var(--gold); }
+
+:root[data-theme="eli"] {
+  --bg: #0d0a1c;
+  --rail: #17112c;
+  --surface: #1c1635;
+  --elevate: #292048;
+  --sunken: #110d26;
+  --line: rgba(157, 134, 224, .19);
+  --line-2: rgba(148, 230, 241, .39);
+  --text: #f5efff;
+  --dim: #c5b9e5;
+  --faint: #998ebc;
+  --gold: #81f3f4;
+  --gold-soft: rgba(91, 228, 237, .14);
+  --gold-border: rgba(129, 243, 244, .40);
+  --leaf: #a6e9cc;
+  --leaf-border: rgba(166, 233, 204, .40);
+  --danger: #ff768e;
+  --brown: #762b91;
+  --brown-hi: #b13b9d;
+  --bronze: #d35db4;
+  --scrollbar: #514175;
+  --scrollbar-hover: #7556a3;
+}
+:root[data-theme="eli"] .topbar {
+  background: linear-gradient(100deg, #231547, #17112c 55%, #40204e);
+  border-bottom-color: rgba(129, 243, 244, .45);
+}
+:root[data-theme="eli"] .view-head { background: linear-gradient(90deg, rgba(143, 67, 216, .21), transparent 58%, rgba(47, 203, 222, .10)); }
+:root[data-theme="eli"] .brand { color: var(--gold); text-shadow: 0 0 14px rgba(129, 243, 244, .35); }
+:root[data-theme="eli"] .nav.active { box-shadow: inset 3px 0 0 var(--gold), 0 0 16px rgba(129, 243, 244, .08); }
+:root[data-theme="eli"] .settings-section { border-color: rgba(157, 134, 224, .29); box-shadow: 0 8px 25px rgba(92, 42, 160, .12); }
+:root[data-theme="eli"] .btn.primary { color: #fff5ff; box-shadow: 0 0 16px rgba(177, 59, 157, .18); }
+:root[data-theme="eli"] .btn.primary:hover:not(:disabled) { background: linear-gradient(180deg, #a43b91, var(--brown)); border-color: var(--gold); }
+
+:root:is([data-theme="ty"], [data-theme="ethan"], [data-theme="eli"]) #search:focus {
+  background: var(--sunken);
+  border-color: var(--line-2);
+}
+:root:is([data-theme="ty"], [data-theme="ethan"], [data-theme="eli"]) .btn:not(.primary):not(.danger):not(.armed):hover:not(:disabled) {
+  background: var(--surface);
+}
+:root:is([data-theme="ty"], [data-theme="ethan"], [data-theme="eli"]) .credit { color: var(--faint); }
+:root:is([data-theme="ty"], [data-theme="ethan"], [data-theme="eli"]) .chip.legal,
+:root:is([data-theme="ty"], [data-theme="ethan"], [data-theme="eli"]) .loc.free,
+:root:is([data-theme="ty"], [data-theme="ethan"], [data-theme="eli"]) .legality.ok { border-color: var(--leaf-border); }
+:root:is([data-theme="ty"], [data-theme="ethan"], [data-theme="eli"]) .chip.restricted,
+:root:is([data-theme="ty"], [data-theme="ethan"], [data-theme="eli"]) .deck-price { border-color: var(--gold-border); }
+:root:is([data-theme="ty"], [data-theme="ethan"], [data-theme="eli"]) ::-webkit-scrollbar-thumb { background: var(--scrollbar); }
+:root:is([data-theme="ty"], [data-theme="ethan"], [data-theme="eli"]) ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
 .compact .view-head { padding-top: 12px; padding-bottom: 12px; }
 .compact .coll-grid { gap: 10px; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
 .compact .nav { padding-top: 6px; padding-bottom: 6px; }
