@@ -922,13 +922,17 @@ function collectionComparator(sort) {
   return byName;
 }
 
-/** Neighbours in Name order among printings absent from all decks. */
+/** Neighbours in Name order among printings with a copy outside decks. */
 function collectionPlacement(entries, card, decks = []) {
   const existing = entries.find((entry) => entry.id === card.id) || null;
-  const deckCardIds = new Set(decks.flatMap((deck) =>
-    (deck.cards || []).map((line) => line.card_id)));
-  const ordered = entries.filter((entry) =>
-    entry.id !== card.id && !entry.allocated && !deckCardIds.has(entry.id));
+  const deckCopies = new Map();
+  decks.forEach((deck) => (deck.cards || []).forEach((line) => {
+    if (line.proxy) return;
+    deckCopies.set(line.card_id,
+      (deckCopies.get(line.card_id) || 0) + (Number(line.quantity) || 0));
+  }));
+  const ordered = entries.filter((entry) => entry.id !== card.id &&
+    entry.quantity > Math.max(entry.allocated || 0, deckCopies.get(entry.id) || 0));
   const candidate = existing || {
     id: card.id, name: card.name || "", set: card.set || "",
     collector_number: card.collector_number || "",
@@ -1064,8 +1068,8 @@ function previewManagerPlacement() {
     state.library.entries || [], card, state.library.decks || []);
   ui.managerPlacementTitle.textContent = "Alphabetical position";
   ui.managerPlacementNote.textContent = placement.existing
-    ? `You own ${placement.existing.quantity} of this printing. Adding will increase its count. Nearby cards in decks are excluded.`
-    : "This printing will go between these cards in Name order. Cards in decks are excluded.";
+    ? `You own ${placement.existing.quantity} of this printing. Adding will increase its count. Nearby cards with a copy outside decks are shown.`
+    : "This printing will go between these cards in Name order. Nearby cards with a copy outside decks are shown.";
   const row = (entry, kind) => `<li class="${kind}"><span>${escapeHtml(managerEntryLabel(entry))}</span>` +
     (kind === "current" ? "<b>Card to add</b>" : "") + "</li>";
   ui.managerPlacementList.innerHTML =

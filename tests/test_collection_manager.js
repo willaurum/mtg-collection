@@ -57,8 +57,37 @@ assert.deepEqual(Array.from(result.after, (entry) => entry.id), ['z']);
 
 result = context.collectionPlacement(entries, {
   id: 'new', name: 'Counterspell', set: '2xm', collector_number: '45',
-}, [{ cards: [{ card_id: 'b', zone: 'maybeboard', proxy: false }] }]);
+}, [{ cards: [{ card_id: 'b', quantity: 1, zone: 'maybeboard', proxy: false }] }]);
 assert.deepEqual(Array.from(result.before, (entry) => entry.id), ['a']);
 assert.deepEqual(Array.from(result.after, (entry) => entry.id), ['l', 'z']);
+
+const spareCopies = [
+  { id: 'b', name: 'Birds of Paradise', quantity: 2, allocated: 1 },
+  { id: 'l', name: 'Lightning Bolt', quantity: 1, allocated: 1 },
+  { id: 'z', name: 'Zuran Orb', quantity: 1, allocated: 0 },
+];
+result = context.collectionPlacement(spareCopies, { id: 'new', name: 'Counterspell' }, [
+  { cards: [
+    { card_id: 'b', quantity: 1, zone: 'main', proxy: false },
+    { card_id: 'l', quantity: 1, zone: 'main', proxy: false },
+  ] },
+]);
+assert.deepEqual(Array.from(result.before, (entry) => entry.id), ['b'],
+  'one spare owned copy should keep a printing in the placement list');
+assert.deepEqual(Array.from(result.after, (entry) => entry.id), ['z'],
+  'a fully used printing should stay out of the placement list');
+
+result = context.collectionPlacement(spareCopies, { id: 'new', name: 'Counterspell' }, [
+  { cards: [{ card_id: 'b', quantity: 1, zone: 'main', proxy: false }] },
+  { cards: [{ card_id: 'b', quantity: 1, zone: 'maybeboard', proxy: false }] },
+]);
+assert.deepEqual(Array.from(result.before, (entry) => entry.id), [],
+  'main deck and maybeboard copies should both count toward used copies');
+
+result = context.collectionPlacement(spareCopies, { id: 'new', name: 'Counterspell' }, [
+  { cards: [{ card_id: 'b', quantity: 2, zone: 'main', proxy: true }] },
+]);
+assert.deepEqual(Array.from(result.before, (entry) => entry.id), ['b'],
+  'proxy deck lines should not use physical collection copies');
 
 console.log('Collection manager placement checks passed.');
