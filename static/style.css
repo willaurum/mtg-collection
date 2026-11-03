@@ -409,6 +409,43 @@ body.busy .progress { opacity: 1; }
 :root[data-theme="light"] { --bg: #f3f5ef; --rail: #e8eee3; --surface: #fafbf7; --elevate: #fff; --sunken: #edf1e8; --line: #ced8c8; --line-2: #a1b399; --text: #203322; --dim: #4c624a; --faint: #63725d; --gold: #805712; --gold-soft: #ac812c18; --leaf: #396a27; --danger: #b32a32; --brown: #e9d6b3; --brown-hi: #f2dfbf; --bronze: #c2a477; }
 :root[data-theme="light"] .credit { color: var(--dim); }
 :root[data-theme="light"] .btn.primary { color: #382806; }
+:root[data-theme="katrine"] {
+  --bg: #0a0c15;
+  --rail: #101323;
+  --surface: #151b2d;
+  --elevate: #1d263b;
+  --sunken: #0c1120;
+  --line: rgba(117, 151, 207, .17);
+  --line-2: rgba(151, 179, 225, .34);
+  --text: #f0edf4;
+  --dim: #b2bbd2;
+  --faint: #8793b0;
+  --gold: #fa8c86;
+  --gold-soft: rgba(231, 74, 92, .15);
+  --leaf: #8bbff1;
+  --danger: #ff657f;
+  --brown: #742c49;
+  --brown-hi: #a24059;
+  --bronze: #b64f68;
+}
+:root[data-theme="katrine"] .topbar {
+  background: linear-gradient(100deg, #17243e, #101323 54%, #321926);
+  border-bottom-color: rgba(226, 88, 109, .35);
+}
+:root[data-theme="katrine"] .rail { background: linear-gradient(180deg, #121b32, #101323 48%, #1b1324); }
+:root[data-theme="katrine"] .view-head { background: linear-gradient(90deg, rgba(57, 90, 147, .16), transparent 62%, rgba(148, 49, 69, .10)); }
+:root[data-theme="katrine"] #search:focus { background: var(--sunken); border-color: #728fc6; }
+:root[data-theme="katrine"] .btn:not(.primary):not(.danger):not(.armed):hover:not(:disabled) { background: #27334e; }
+:root[data-theme="katrine"] .btn.primary { color: #fff3f1; }
+:root[data-theme="katrine"] .btn.primary:hover:not(:disabled) { background: linear-gradient(180deg, #bb4b60, var(--brown-hi)); }
+:root[data-theme="katrine"] .chip.legal,
+:root[data-theme="katrine"] .loc.free,
+:root[data-theme="katrine"] .legality.ok { border-color: rgba(139, 191, 241, .36); }
+:root[data-theme="katrine"] .chip.restricted,
+:root[data-theme="katrine"] .deck-price { border-color: rgba(250, 140, 134, .38); }
+:root[data-theme="katrine"] .credit { color: var(--faint); }
+:root[data-theme="katrine"] ::-webkit-scrollbar-thumb { background: #364363; }
+:root[data-theme="katrine"] ::-webkit-scrollbar-thumb:hover { background: #526385; }
 :root[data-theme="eli"] {
   --bg: #ff3b00; --rail: #ccff00; --surface: #ff00b7;
   --elevate: #00ffff; --sunken: #ffea00;

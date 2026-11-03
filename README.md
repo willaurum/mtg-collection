@@ -103,8 +103,9 @@ outside selection mode.
 
 ## Settings
 
-Open **Settings** in the rail to choose light/dark theme, text size, compact
-spacing, startup screen, collection layout/sort, and remembered filters.
+Open **Settings** in the rail to choose Dark, Light, Eli, or the Grixis-inspired
+Katrine theme, plus text size, compact spacing, startup screen, collection
+layout/sort, and remembered filters.
 These preferences are saved on the current browser or desktop device.
 
 The Prices section shows collection value and can force a refresh of all
