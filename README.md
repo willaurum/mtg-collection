@@ -110,9 +110,8 @@ These preferences are saved on the current browser or desktop device.
 The Prices section shows collection value and can force a refresh of all
 collection, deck, and cheapest-printing prices. Data & backups provides profile
 import/export, optional weekly/monthly in-app backup reminders, and image-cache
-clearing. In the desktop app, cache clearing removes local downloaded art;
-in a regular browser, it clears the server's image cache. Browser caches may
-retain their own copies.
+access. The desktop app can open its local image folder; a regular browser can
+clear the server's image cache. Browser caches may retain their own copies.
 
 Account password changes require the current password. Automatic local sign-in
 mode does not offer password changes or sign-out. About & help lists shortcuts

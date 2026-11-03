@@ -45,9 +45,22 @@ class DesktopApi:
             return ""
         return "http://127.0.0.1:%d" % _image_cache_server.server_port
 
-    def clear_image_cache(self):
-        import scryfall
-        return {"removed": scryfall.clear_image_cache()}
+    def open_image_folder(self):
+        import desktop_image_cache
+        path = desktop_image_cache.image_dir()
+        try:
+            os.makedirs(path, exist_ok=True)
+            if os.name == "nt":
+                os.startfile(path)
+            elif sys.platform == "darwin":
+                import subprocess
+                subprocess.Popen(["open", path])
+            else:
+                import subprocess
+                subprocess.Popen(["xdg-open", path])
+            return {"ok": True, "path": path}
+        except OSError as exc:
+            return {"ok": False, "error": str(exc)}
 
     def save_profile(self, contents, filename):
         """Ask the owner where to save a profile backup, then write it there."""

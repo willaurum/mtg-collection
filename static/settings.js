@@ -94,16 +94,28 @@ async function changePassword(event) {
   } finally { button.disabled = false; }
 }
 
-async function clearCachedImages() {
+function configureImageCacheSettings() {
+  if (!window.pywebview?.api?.open_image_folder) return;
+  el("settingsClearImages").textContent = "Open image folder";
+  el("cacheDescription").textContent =
+    "View downloaded card art on this computer. All app accounts in this Windows profile share one image folder.";
+}
+
+async function manageCachedImages() {
   const button = el("settingsClearImages");
   if (button.disabled) return;
   button.disabled = true;
-  el("cacheStatus").textContent = "Clearing downloaded images…";
+  const local = Boolean(window.pywebview?.api?.open_image_folder);
+  el("cacheStatus").textContent = local ? "Opening image folder…" : "Clearing downloaded images…";
   try {
-    const result = window.pywebview?.api?.clear_image_cache
-      ? await window.pywebview.api.clear_image_cache()
-      : await getJson("/api/cache/images/clear", { method: "POST" });
-    el("cacheStatus").textContent = `Cleared ${result.removed} cached images. They will download again when needed.`;
+    if (local) {
+      const result = await window.pywebview.api.open_image_folder();
+      if (!result.ok) throw new Error(result.error || "Could not open the image folder.");
+      el("cacheStatus").textContent = `Opened ${result.path}.`;
+    } else {
+      const result = await getJson("/api/cache/images/clear", { method: "POST" });
+      el("cacheStatus").textContent = `Cleared ${result.removed} cached images. They will download again when needed.`;
+    }
   } catch (error) { el("cacheStatus").textContent = error.message; }
   finally { button.disabled = false; }
 }
@@ -143,7 +155,9 @@ function initializeSettings() {
     savePreference("mtg.backup-snooze", String(Date.now() + 86400000));
     checkBackupReminder();
   });
-  el("settingsClearImages").addEventListener("click", clearCachedImages);
+  configureImageCacheSettings();
+  window.addEventListener("pywebviewready", configureImageCacheSettings, { once: true });
+  el("settingsClearImages").addEventListener("click", manageCachedImages);
   el("passwordForm").addEventListener("submit", changePassword);
   el("settingsSignOut").addEventListener("click", signOut);
   checkBackupReminder();
