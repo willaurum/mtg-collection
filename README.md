@@ -43,8 +43,10 @@ powershell -ExecutionPolicy Bypass -File build_exe.ps1
 ```
 
 That produces `dist\MTGCardViewer.exe`. The spec bundles `templates/` and
-`static/`; when frozen, the image cache moves to
-`%LOCALAPPDATA%\MTGCardViewer\images` since the bundle itself is read-only.
+`static/`. The desktop app stores downloaded art in
+`%LOCALAPPDATA%\MTGCardViewer\images`, shared by app accounts in that Windows
+profile. It downloads art directly from Scryfall and
+serves it from localhost; card and deck data still come from the selected server.
 
 ## Using it
 
@@ -108,8 +110,9 @@ These preferences are saved on the current browser or desktop device.
 The Prices section shows collection value and can force a refresh of all
 collection, deck, and cheapest-printing prices. Data & backups provides profile
 import/export, optional weekly/monthly in-app backup reminders, and image-cache
-clearing. Cache clearing affects the server's shared downloaded images only.
-Browser caches may retain their own copies.
+clearing. In the desktop app, cache clearing removes local downloaded art;
+in a regular browser, it clears the server's image cache. Browser caches may
+retain their own copies.
 
 Account password changes require the current password. Automatic local sign-in
 mode does not offer password changes or sign-out. About & help lists shortcuts
@@ -118,8 +121,8 @@ and the app version; set `MTG_APP_VERSION` for a release label (otherwise it sho
 
 ## Where the data lives
 
-Everything is in one SQLite database — `library.db` — inside the data
-directory, alongside the cached card art and the session signing key:
+The database and session signing key live in the data directory. A server
+also keeps an image cache there for people using a regular browser:
 
 ```
 <data dir>/
@@ -129,8 +132,9 @@ directory, alongside the cached card art and the session signing key:
 ```
 
 The data directory is `$MTG_DATA_DIR` when set (the server sets it), and
-otherwise `Documents\MTG Card Viewer` — the same folder the desktop app has
-always used, so an existing install keeps its cached art.
+otherwise `Documents\MTG Card Viewer`. The desktop app keeps one image folder
+under `%LOCALAPPDATA%\MTGCardViewer\images` for all app accounts in that Windows
+profile, whether its library is local or on a remote server.
 
 Every table that holds a person's cards carries a `user_id`, and every query
 filters on it, so the schema was multi-user from the first migration even when
@@ -449,6 +453,7 @@ the card.
 | File | Purpose |
 | --- | --- |
 | `desktop_app.py` | Desktop shell — picks a free port, starts Flask, opens the pywebview window |
+| `desktop_image_cache.py` | Loopback image service for the desktop's shared local art folder |
 | `server.py` | Flask routes: pages, login, the Scryfall proxy, the cached image proxy |
 | `db.py` | SQLite schema, connections and migrations |
 | `store.py` | Collection and deck operations, every one scoped to a user |

@@ -100,7 +100,9 @@ async function clearCachedImages() {
   button.disabled = true;
   el("cacheStatus").textContent = "Clearing downloaded images…";
   try {
-    const result = await getJson("/api/cache/images/clear", { method: "POST" });
+    const result = window.pywebview?.api?.clear_image_cache
+      ? await window.pywebview.api.clear_image_cache()
+      : await getJson("/api/cache/images/clear", { method: "POST" });
     el("cacheStatus").textContent = `Cleared ${result.removed} cached images. They will download again when needed.`;
   } catch (error) { el("cacheStatus").textContent = error.message; }
   finally { button.disabled = false; }

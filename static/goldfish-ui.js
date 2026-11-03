@@ -181,7 +181,7 @@ function practiceCard(id, field = false) {
   const counters = [item.counters ? `${item.counters} counters` : "",
     ...Object.entries(item.namedCounters || {}).filter(([, n]) => n).map(([label, n]) => `${label}: ${n}`)].filter(Boolean).join(" · ");
   return `<button type="button" class="practice-card${item.tapped ? " tapped" : ""}${practiceSelected.has(id) ? " selected" : ""}" data-card="${id}" aria-label="${escapeHtml(name)}${item.tapped ? ", tapped" : ""}" aria-pressed="${practiceSelected.has(id)}" ${field ? `style="left:${item.x || 0}px;top:${item.y || 0}px"` : ""}>
-    <span class="practice-card-art${item.faceDown ? " face-down" : ""}">${art ? `<img draggable="false" src="/img?u=${encodeURIComponent(art)}" alt="${escapeHtml(name)}">` : `<span>${escapeHtml(name)}</span>`}</span>
+    <span class="practice-card-art${item.faceDown ? " face-down" : ""}">${art ? `<img draggable="false" src="${imageSrc(art)}" alt="${escapeHtml(name)}">` : `<span>${escapeHtml(name)}</span>`}</span>
     ${counters ? `<span class="practice-counter-badge">${escapeHtml(counters)}</span>` : ""}
     ${item.token ? '<span class="practice-token-badge">Token</span>' : ""}</button>`;
 }
@@ -239,7 +239,7 @@ function practicePreview(id) {
   if (!item) return;
   const art = item.faceDown ? null : imageUrl(item.card, item.face);
   const face = item.card.card_faces?.[item.face] || item.card;
-  el("practicePreview").innerHTML = `${art ? `<img src="/img?u=${encodeURIComponent(art)}" alt="">` : ""}<strong>${escapeHtml(item.faceDown ? "Face-down card" : face.name || item.card.name || "Card")}</strong>`;
+  el("practicePreview").innerHTML = `${art ? `<img src="${imageSrc(art)}" alt="">` : ""}<strong>${escapeHtml(item.faceDown ? "Face-down card" : face.name || item.card.name || "Card")}</strong>`;
 }
 
 function practicePointerDown(event) {
@@ -450,7 +450,7 @@ async function practiceSearchTokens(page) {
     el("practiceTokenResults").innerHTML = practiceTokenResults.map((card, index) => {
       const art = imageUrl(card, 0);
       const stats = card.power != null ? ` · ${card.power}/${card.toughness}` : "";
-      return `<button type="button" class="practice-token-result" data-token-index="${index}">${art ? `<img loading="lazy" src="/img?u=${encodeURIComponent(art)}" alt="${escapeHtml(card.name)}">` : ""}<span>${escapeHtml(card.name + stats)}</span><small>${escapeHtml(card.set_name || "")}</small></button>`;
+      return `<button type="button" class="practice-token-result" data-token-index="${index}">${art ? `<img loading="lazy" src="${imageSrc(art)}" alt="${escapeHtml(card.name)}">` : ""}<span>${escapeHtml(card.name + stats)}</span><small>${escapeHtml(card.set_name || "")}</small></button>`;
     }).join("");
     el("practiceTokenPage").textContent = `Page ${page}`;
     el("practiceTokenPrev").disabled = page <= 1;

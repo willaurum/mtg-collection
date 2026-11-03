@@ -34,10 +34,20 @@ TITLE = "MTG Card Viewer"
 BACKGROUND = "#0b100d"
 LOCAL_ACCOUNT = "local"
 _desktop_window = None
+_image_cache_server = None
 
 
 class DesktopApi:
     """Small native bridge for actions the embedded browser cannot do well."""
+
+    def image_cache_base(self):
+        if _image_cache_server is None:
+            return ""
+        return "http://127.0.0.1:%d" % _image_cache_server.server_port
+
+    def clear_image_cache(self):
+        import scryfall
+        return {"removed": scryfall.clear_image_cache()}
 
     def save_profile(self, contents, filename):
         """Ask the owner where to save a profile backup, then write it there."""
@@ -136,13 +146,20 @@ def start_local():
 
 
 def main():
-    global _desktop_window
+    global _desktop_window, _image_cache_server
     parser = argparse.ArgumentParser(description="MTG Card Viewer desktop window")
     parser.add_argument("--server", metavar="URL",
                         help="use a shared server, e.g. http://raspberrypi.local:8000")
     parser.add_argument("--local", action="store_true",
                         help="forget the saved server and use the local library")
     args = parser.parse_args()
+
+    import desktop_image_cache
+    os.environ["MTG_IMAGE_CACHE_DIR"] = desktop_image_cache.image_dir()
+    try:
+        _image_cache_server = desktop_image_cache.start()
+    except OSError as exc:
+        print("Local image cache unavailable: %s" % exc, file=sys.stderr)
 
     config = load_config()
     if args.local:
@@ -177,7 +194,13 @@ def main():
         background_color=BACKGROUND,
         js_api=desktop_api,
     )
-    webview.start()
+    webview_path = os.path.join(
+        os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"),
+        "MTGCardViewer", "webview")
+    os.makedirs(webview_path, exist_ok=True)
+    webview.start(private_mode=False, storage_path=webview_path)
+    if _image_cache_server is not None:
+        _image_cache_server.shutdown()
     return 0
 
 

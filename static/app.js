@@ -1,5 +1,10 @@
-/* MTG Card Viewer - front end.
-   Talks only to the local Flask app, which proxies Scryfall and caches art. */
+/* MTG Card Viewer - front end. The desktop shell keeps its own art cache. */
+
+let desktopImageBase = "";
+
+function imageSrc(url) {
+  return url ? `${desktopImageBase}/img?u=${encodeURIComponent(url)}` : "";
+}
 
 const FORMATS = ["standard", "pioneer", "modern", "legacy",
                  "vintage", "commander", "pauper", "brawl"];
@@ -413,7 +418,7 @@ function renderArt(card) {
     ui.artPlaceholder.style.display = "none";
   };
   ui.art.onerror = () => { ui.artPlaceholder.textContent = "Could not load art"; };
-  ui.art.src = `/img?u=${encodeURIComponent(url)}`;
+  ui.art.src = imageSrc(url);
 }
 
 function renderCard(card) {
@@ -718,7 +723,7 @@ function locationChips(entry) {
 
 function thumbHtml(entry, badge, extra) {
   const art = imageUrl(entry.card || {}, 0);
-  const src = art ? `/img?u=${encodeURIComponent(art)}` : "";
+  const src = imageSrc(art);
   return `
     <div class="thumb">
       <img src="${src}" alt="${escapeHtml(entry.name)}" loading="lazy">
@@ -1047,7 +1052,7 @@ function renderManagerCard() {
   const card = state.managerCard;
   if (!card) return;
   const art = imageUrl(card, 0);
-  ui.managerArt.src = art ? `/img?u=${encodeURIComponent(art)}` : "";
+  ui.managerArt.src = imageSrc(art);
   ui.managerArt.alt = card.name || "";
   ui.managerName.textContent = card.name || "Unknown card";
   ui.managerType.textContent = frontFace(card).type_line || card.type_line || "";
@@ -1252,7 +1257,7 @@ function showCardPreview(cardOrId, anchor) {
   const card = entry ? (entry.card || {}) : (cardOrId || {});
   if (!Object.keys(card).length) return;
   const art = imageUrl(card, 0);
-  ui.previewArt.src = art ? `/img?u=${encodeURIComponent(art)}` : "";
+  ui.previewArt.src = imageSrc(art);
   ui.previewArt.alt = (entry && entry.name) || card.name || "";
   ui.cardPreview.hidden = false;
 
@@ -1397,7 +1402,7 @@ function detailBase(card, kicker, meta) {
   } catch {
     detailFactsElement().textContent = "Additional card details are unavailable for this printing.";
   }
-  ui.detailArt.src = art ? `/img?u=${encodeURIComponent(art)}` : "";
+  ui.detailArt.src = imageSrc(art);
   ui.detailArt.alt = card.name || "";
   ui.cardDetailDialog.hidden = false;
 }
@@ -1674,7 +1679,7 @@ function deckCoverHtml(deck) {
   const card = lineCard(coverLine);
   const art = artCropUrl(card, 0);
   return `<span class="deck-cover${commanderLine ? " commander-cover" : ""}" aria-hidden="true">
-    ${art ? `<img src="/img?u=${encodeURIComponent(art)}" alt="" loading="lazy">` : '<svg class="ico"><use href="#i-decks"/></svg>'}
+    ${art ? `<img src="${imageSrc(art)}" alt="" loading="lazy">` : '<svg class="ico"><use href="#i-decks"/></svg>'}
     ${commanderLine ? '<i>Commander</i>' : ""}
   </span>`;
 }
@@ -2015,7 +2020,7 @@ function stackCardHtml({ line, entry, card }, deck) {
     <div class="stack-card${isCommander || isPartner ? " is-commander" : ""}${isCompanion ? " is-companion" : ""}${broken.length ? " illegal" : ""}${line.proxy ? " proxy" : ""}"
          data-id="${id}" title="${escapeHtml(tip)}">
       ${broken.length ? '<span class="warn" aria-label="Breaks a deck rule">!</span>' : ""}
-      <img src="${art ? `/img?u=${encodeURIComponent(art)}` : ""}"
+      <img src="${imageSrc(art)}"
            alt="${escapeHtml(lineName(line))}" loading="lazy">
       ${line.proxy ? '<span class="proxy-mark">Proxy</span>' : ""}
       ${isPartner ? '<span class="role-mark">Partner</span>' : isCompanion ? '<span class="role-mark">Companion</span>' : ""}
@@ -2907,4 +2912,35 @@ initCardSelections();
 initializeSettings();
 loadIdentity();
 restoreRecent();
-startApp();
+let appStarted = false;
+function startWhenReady() {
+  if (appStarted) return;
+  appStarted = true;
+  startApp();
+}
+
+async function connectDesktopImageCache() {
+  if (!window.pywebview?.api?.image_cache_base) return startWhenReady();
+  try {
+    const base = await window.pywebview.api.image_cache_base();
+    if (base) {
+      desktopImageBase = base;
+      // The bridge may arrive after initial rendering. Move those images too.
+      document.querySelectorAll('img[src^="/img?u="]').forEach((img) => {
+        img.src = base + img.getAttribute("src");
+      });
+    }
+  } catch { /* The Pi image route remains the fallback. */ }
+  startWhenReady();
+}
+
+document.addEventListener("pywebviewready", connectDesktopImageCache, { once: true });
+if (window.pywebview?.api) connectDesktopImageCache();
+setTimeout(startWhenReady, 150);
+
+document.addEventListener("error", (event) => {
+  const img = event.target;
+  if (!(img instanceof HTMLImageElement) || !desktopImageBase) return;
+  const localPrefix = `${desktopImageBase}/img?u=`;
+  if (img.src.startsWith(localPrefix)) img.src = img.src.slice(desktopImageBase.length);
+}, true);

@@ -35,7 +35,10 @@ logger = logging.getLogger(__name__)
 
 
 def _cache_root():
-    """Images live beside the database, wherever that is."""
+    """The desktop can override the server's database-adjacent image folder."""
+    override = os.environ.get("MTG_IMAGE_CACHE_DIR")
+    if override:
+        return override
     try:
         import db
         return os.path.join(db.data_dir(), "images")
@@ -328,8 +331,12 @@ def image_bytes(url):
             data = resp.read()
     except (urllib.error.HTTPError, urllib.error.URLError) as exc:
         raise ScryfallError("Could not download card image: %s" % exc) from exc
-    tmp = path + ".part"
-    with open(tmp, "wb") as fh:
-        fh.write(data)
-    os.replace(tmp, path)
+    fd, tmp = tempfile.mkstemp(prefix="image-", suffix=".part", dir=CACHE_DIR)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
     return data
