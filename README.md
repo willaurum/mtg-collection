@@ -104,9 +104,9 @@ outside selection mode.
 ## Settings
 
 Open **Settings** in the rail to choose Dark, Light, the Grixis-inspired
-Katrine theme, Ty's blue and grey palette, Ethan's comic blue and yellow, or
-Eli's neon purple and cyan, plus text size, compact spacing, startup screen,
-collection layout/sort, and remembered filters.
+Katrine theme, Ty's icy blue and slate palette, Ethan's midnight blue and
+yellow comic style, or Eli's neon purple and cyan. You can also set text size,
+compact spacing, startup screen, collection layout/sort, and remembered filters.
 These preferences are saved on the current browser or desktop device.
 
 The Prices section shows collection value and can force a refresh of all
