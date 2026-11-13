@@ -15,13 +15,14 @@ pip install -r requirements.txt
 Run the app with my Pi collection:
 
 ```powershell
-python desktop_app.py --server http://100.116.99.123:8000
+python desktop_app.py
 ```
 
-I can also double-click `run.bat`. The app remembers the server address, so I
-don't have to type it every time. `python desktop_app.py --local` switches to a
-separate collection on this computer. That local collection does not sync back
-to the Pi.
+I can also double-click `run.bat` or the built exe. They open the public
+`https://willipi.tailfd9736.ts.net/` Funnel address, so friends do not need
+Tailscale. `python desktop_app.py --local` switches to a separate collection on
+this computer until I give `--server` again. That local collection does not
+sync back to the Pi.
 
 ## Update the Pi
 

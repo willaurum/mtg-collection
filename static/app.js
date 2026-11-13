@@ -1385,7 +1385,7 @@ function detailFactsHtml(card, shown) {
   return `<div class="detail-fact-grid">${facts.map(([label, value]) =>
     `<div><span>${label}</span><b>${value}</b></div>`).join("")}</div>
     <section class="detail-info-section"><h3>Prices</h3><div class="chips">${priceChipsHtml(card)}</div></section>
-    <section class="detail-info-section"><h3>Format legality</h3><div class="chips">${legalityChipsHtml(card)}</div></section>`;
+    <section class="detail-info-section"><h3>Format legality</h3><div class="chips format-legality">${legalityChipsHtml(card)}</div></section>`;
 }
 
 function detailBase(card, kicker, meta) {

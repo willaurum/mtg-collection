@@ -9,3 +9,9 @@ Rendering issues in wishlist
 better sorting in wishlist and deck builder
 Partner Commanders / companion slot
 Performance changes
+
+tys
+
+- the X on the card pop up moves with scroll
+- filters for colors should be and/or not exclusive and
+- 

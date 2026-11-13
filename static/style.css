@@ -20,6 +20,10 @@
   --gold-soft: rgba(214, 180, 117, 0.13);
   --leaf: #8cc077;
   --danger: #e0736a;
+  --legal-green: #8cc077;
+  --illegal-red: #e0736a;
+  --legal-border: rgba(140, 192, 119, 0.35);
+  --illegal-border: rgba(224, 115, 106, 0.45);
 
   --brown: #46341f;
   --brown-hi: #5a4429;
@@ -406,7 +410,7 @@ body.busy .progress { opacity: 1; }
 .settings-section a { color: var(--gold); }
 .backup-reminder { position: fixed; right: 20px; bottom: 20px; z-index: 120; max-width: min(440px, calc(100vw - 40px)); padding: 18px; border: 1px solid var(--gold); border-radius: var(--r); background: var(--elevate); box-shadow: 0 8px 30px #0003; }
 .backup-reminder p { margin: 0 0 12px; }
-:root[data-theme="light"] { --bg: #f3f5ef; --rail: #e8eee3; --surface: #fafbf7; --elevate: #fff; --sunken: #edf1e8; --line: #ced8c8; --line-2: #a1b399; --text: #203322; --dim: #4c624a; --faint: #63725d; --gold: #805712; --gold-soft: #ac812c18; --leaf: #396a27; --danger: #b32a32; --brown: #e9d6b3; --brown-hi: #f2dfbf; --bronze: #c2a477; }
+:root[data-theme="light"] { --bg: #f3f5ef; --rail: #e8eee3; --surface: #fafbf7; --elevate: #fff; --sunken: #edf1e8; --line: #ced8c8; --line-2: #a1b399; --text: #203322; --dim: #4c624a; --faint: #63725d; --gold: #805712; --gold-soft: #ac812c18; --leaf: #396a27; --danger: #b32a32; --legal-green: #396a27; --illegal-red: #b32a32; --legal-border: rgba(57, 106, 39, 0.45); --illegal-border: rgba(179, 42, 50, 0.45); --brown: #e9d6b3; --brown-hi: #f2dfbf; --bronze: #c2a477; }
 :root[data-theme="light"] .credit { color: var(--dim); }
 :root[data-theme="light"] .btn.primary { color: #382806; }
 :root[data-theme="katrine"] {
@@ -438,9 +442,7 @@ body.busy .progress { opacity: 1; }
 :root[data-theme="katrine"] .btn:not(.primary):not(.danger):not(.armed):hover:not(:disabled) { background: #27334e; }
 :root[data-theme="katrine"] .btn.primary { color: #fff3f1; }
 :root[data-theme="katrine"] .btn.primary:hover:not(:disabled) { background: linear-gradient(180deg, #bb4b60, var(--brown-hi)); }
-:root[data-theme="katrine"] .chip.legal,
-:root[data-theme="katrine"] .loc.free,
-:root[data-theme="katrine"] .legality.ok { border-color: rgba(139, 191, 241, .36); }
+:root[data-theme="katrine"] .loc.free { border-color: rgba(139, 191, 241, .36); }
 :root[data-theme="katrine"] .chip.restricted,
 :root[data-theme="katrine"] .deck-price { border-color: rgba(250, 140, 134, .38); }
 :root[data-theme="katrine"] .credit { color: var(--faint); }
@@ -620,9 +622,7 @@ body.busy .progress { opacity: 1; }
   background: var(--surface);
 }
 :root:is([data-theme="ty"], [data-theme="ethan"], [data-theme="eli"]) .credit { color: var(--faint); }
-:root:is([data-theme="ty"], [data-theme="ethan"], [data-theme="eli"]) .chip.legal,
-:root:is([data-theme="ty"], [data-theme="ethan"], [data-theme="eli"]) .loc.free,
-:root:is([data-theme="ty"], [data-theme="ethan"], [data-theme="eli"]) .legality.ok { border-color: var(--leaf-border); }
+:root:is([data-theme="ty"], [data-theme="ethan"], [data-theme="eli"]) .loc.free { border-color: var(--leaf-border); }
 :root:is([data-theme="ty"], [data-theme="ethan"], [data-theme="eli"]) .chip.restricted,
 :root:is([data-theme="ty"], [data-theme="ethan"], [data-theme="eli"]) .deck-price { border-color: var(--gold-border); }
 :root:is([data-theme="ty"], [data-theme="ethan"], [data-theme="eli"]) ::-webkit-scrollbar-thumb { background: var(--scrollbar); }
@@ -890,6 +890,8 @@ kbd {
 .chip.legal { color: var(--leaf); border-color: rgba(140, 192, 119, 0.3); }
 .chip.restricted { color: var(--gold); border-color: rgba(214, 180, 117, 0.3); }
 .chip.banned { color: var(--danger); border-color: rgba(224, 115, 106, 0.3); }
+:root .format-legality .chip.legal { color: var(--legal-green); border-color: var(--legal-border); }
+:root .format-legality .chip:is(.restricted, .banned, .not_legal) { color: var(--illegal-red); border-color: var(--illegal-border); }
 
 .card-actions {
   display: flex;
@@ -1165,7 +1167,7 @@ kbd {
 .deck-category:hover { border-color: var(--line); }
 .deck-category:focus { border-color: var(--line-2); background: var(--sunken); color: var(--text); }
 
-#deckSummary.ok { color: var(--leaf); }
+#deckSummary.ok { color: var(--legal-green); }
 
 .deck-stats {
   display: grid;
@@ -1215,25 +1217,25 @@ kbd {
   white-space: nowrap;
 }
 
-.legality.ok { color: var(--leaf); border-color: rgba(140, 192, 119, 0.35); }
-.legality.bad { color: var(--danger); border-color: rgba(224, 115, 106, 0.45); }
+.legality.ok { color: var(--legal-green); border-color: var(--legal-border); }
+.legality.bad { color: var(--illegal-red); border-color: var(--illegal-border); }
 
 .deck-problems {
   margin: 5px 0 0;
   font-size: calc(11.5px * var(--text-scale, 1));
   line-height: 1.5;
-  color: var(--danger);
+  color: var(--illegal-red);
   max-width: 70ch;
 }
 
 /* a card that breaks a Commander rule */
 .stack-card.illegal {
-  border-color: var(--danger);
+  border-color: var(--illegal-red);
   box-shadow: 0 0 0 1px rgba(224, 115, 106, 0.55), 0 4px 12px rgba(0, 0, 0, 0.45);
 }
 
 .stack-card.illegal:hover {
-  box-shadow: 0 0 0 1px var(--danger), 0 14px 28px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 0 0 1px var(--illegal-red), 0 14px 28px rgba(0, 0, 0, 0.6);
 }
 
 .stack-card .warn {
@@ -1246,7 +1248,7 @@ kbd {
   width: 19px;
   height: 19px;
   border-radius: 50%;
-  background: var(--danger);
+  background: var(--illegal-red);
   color: #1a0d0c;
   font: 700 calc(12px * var(--text-scale, 1)) var(--sans);
   transition: opacity 0.13s;
@@ -1256,7 +1258,7 @@ kbd {
 .stack-card:hover .warn { opacity: 0; }
 
 .avail-list li.off-colour { border-color: rgba(224, 115, 106, 0.3); }
-.avail-list li.off-colour .an > span { color: var(--danger); }
+.avail-list li.off-colour .an > span { color: var(--illegal-red); }
 
 .deck-body {
   display: grid;
@@ -1560,7 +1562,7 @@ kbd {
 .report-list .rn small { display: block; color: var(--faint); font-size: calc(10.5px * var(--text-scale, 1)); }
 .report-list .rs { color: var(--faint); font-size: calc(10.5px * var(--text-scale, 1)); flex: 0 0 auto; }
 .report-list .warn { display: block; color: var(--gold); font-size: calc(10.5px * var(--text-scale, 1)); }
-.report-list.problems li { color: var(--danger); }
+.report-list.problems li { color: var(--illegal-red); }
 .report-list.problems .rn small { color: rgba(224, 115, 106, 0.72); }
 
 /* -------------------------------------------------------------- toast */

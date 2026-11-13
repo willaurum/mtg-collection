@@ -12,8 +12,8 @@ Two modes:
       reached, the window falls back to the local library rather than showing
       an error page — with a note saying so.
 
-The URL is remembered, so `--server` only needs passing once; `--local` forgets
-it again.
+The Funnel server is used by default.  A custom URL is remembered, and `--local`
+keeps using the separate local library until another `--server` is given.
 """
 
 from __future__ import annotations
@@ -33,6 +33,8 @@ import webview
 TITLE = "MTG Card Viewer"
 BACKGROUND = "#0b100d"
 LOCAL_ACCOUNT = "local"
+DEFAULT_SERVER = "https://willipi.tailfd9736.ts.net"
+OLD_PRIVATE_SERVER = "http://100.116.99.123:8000"
 _desktop_window = None
 _image_cache_server = None
 
@@ -102,6 +104,22 @@ def save_config(config):
         pass
 
 
+def choose_server(config, server=None, local=False):
+    """Use the Funnel by default, migrating this install's old Pi address."""
+    config = dict(config)
+    if local:
+        config["local"] = True
+        config.pop("server", None)
+    elif server:
+        config["server"] = server.rstrip("/")
+        config.pop("local", None)
+    elif config.get("server") == OLD_PRIVATE_SERVER:
+        config["server"] = DEFAULT_SERVER
+
+    target = None if config.get("local") else config.get("server") or DEFAULT_SERVER
+    return target, config
+
+
 def free_port():
     """Let the OS pick an unused port so two copies can run side by side."""
     with socket.socket() as sock:
@@ -162,9 +180,9 @@ def main():
     global _desktop_window, _image_cache_server
     parser = argparse.ArgumentParser(description="MTG Card Viewer desktop window")
     parser.add_argument("--server", metavar="URL",
-                        help="use a shared server, e.g. http://raspberrypi.local:8000")
+                        help="use a different server (default: %s)" % DEFAULT_SERVER)
     parser.add_argument("--local", action="store_true",
-                        help="forget the saved server and use the local library")
+                        help="use the separate local library until --server is given")
     args = parser.parse_args()
 
     import desktop_image_cache
@@ -174,15 +192,10 @@ def main():
     except OSError as exc:
         print("Local image cache unavailable: %s" % exc, file=sys.stderr)
 
-    config = load_config()
-    if args.local:
-        config.pop("server", None)
+    previous_config = load_config()
+    target, config = choose_server(previous_config, args.server, args.local)
+    if config != previous_config:
         save_config(config)
-    elif args.server:
-        config["server"] = args.server.rstrip("/")
-        save_config(config)
-
-    target = config.get("server")
     title = TITLE
     if target:
         print("Checking %s ..." % target)
