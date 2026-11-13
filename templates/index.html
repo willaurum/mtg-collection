@@ -250,10 +250,19 @@
             <option value="quantity">Quantity high–low</option>
             <option value="set">Set A–Z</option>
           </select>
+          <button class="btn filter-toggle" id="wishlistColorsBtn" type="button" aria-expanded="false" aria-controls="wishlistColorsPanel">Colors</button>
           <button class="btn" id="wishlistExportBtn">Export all</button>
         </div>
       </header>
       <div class="view-body">
+        <section class="collection-filter-panel list-color-panel" id="wishlistColorsPanel" hidden aria-label="Wishlist color filters">
+          <div class="filter-group"><span>Colour identity</span><div class="filter-chips">
+            <button type="button" data-list-color="all">Any</button><button type="button" data-list-color="W">W</button><button type="button" data-list-color="U">U</button><button type="button" data-list-color="B">B</button><button type="button" data-list-color="R">R</button><button type="button" data-list-color="G">G</button><button type="button" data-list-color="colorless">Colourless</button>
+          </div></div>
+          <div class="filter-group"><span>Match selected colours</span><div class="filter-chips">
+            <button type="button" data-list-color-mode="or" aria-pressed="true">OR · any selected</button><button type="button" data-list-color-mode="and" aria-pressed="false">AND · all selected</button>
+          </div></div>
+        </section>
         <div class="wishlist-groups" id="wishlistGrid"></div>
         <p class="empty" id="wishlistEmpty" hidden>No cards needed yet. Add one from the card viewer or add a proxy to a deck.</p>
       </div>
@@ -356,7 +365,7 @@
             <button data-collection-filter="availability" data-value="free">Free copies</button>
             <button data-collection-filter="availability" data-value="allocated">In decks</button>
           </div></div>
-          <div class="filter-group"><span>Colour</span><div class="filter-chips">
+          <div class="filter-group"><span>Colour identity</span><div class="filter-chips">
             <button data-collection-filter="color" data-value="all">Any</button>
             <button data-collection-filter="color" data-value="W">W</button>
             <button data-collection-filter="color" data-value="U">U</button>
@@ -364,6 +373,9 @@
             <button data-collection-filter="color" data-value="R">R</button>
             <button data-collection-filter="color" data-value="G">G</button>
             <button data-collection-filter="color" data-value="colorless">Colourless</button>
+          </div><div class="filter-chips color-match-mode" role="group" aria-label="How selected colours match">
+            <button data-color-mode="or" type="button" aria-pressed="true" title="Show cards with any selected colour">OR · any selected</button>
+            <button data-color-mode="and" type="button" aria-pressed="false" title="Show cards with every selected colour">AND · all selected</button>
           </div></div>
           <div class="filter-group"><span>Type</span><div class="filter-chips">
             <button data-collection-filter="type" data-value="all">Any</button>
@@ -469,6 +481,7 @@
             <option value="quantity">Quantity high–low</option>
             <option value="rarity">Rarity high–low</option>
           </select>
+          <button class="btn filter-toggle" id="deckColorsBtn" type="button" aria-expanded="false" aria-controls="deckColorsPanel">Colors</button>
           <button class="btn quiet" id="deckExportBtn">Copy decklist</button>
           <button class="btn" id="goldfishBtn">Goldfish / Practice</button>
           <button class="btn quiet" id="proxyListBtn" hidden>Proxies</button>
@@ -478,6 +491,14 @@
 
       <div class="view-body deck-body">
         <div class="deck-main">
+          <section class="collection-filter-panel list-color-panel" id="deckColorsPanel" hidden aria-label="Deck color filters">
+            <div class="filter-group"><span>Colour identity</span><div class="filter-chips">
+              <button type="button" data-list-color="all">Any</button><button type="button" data-list-color="W">W</button><button type="button" data-list-color="U">U</button><button type="button" data-list-color="B">B</button><button type="button" data-list-color="R">R</button><button type="button" data-list-color="G">G</button><button type="button" data-list-color="colorless">Colourless</button>
+            </div></div>
+            <div class="filter-group"><span>Match selected colours</span><div class="filter-chips">
+              <button type="button" data-list-color-mode="or" aria-pressed="true">OR · any selected</button><button type="button" data-list-color-mode="and" aria-pressed="false">AND · all selected</button>
+            </div></div>
+          </section>
           <div class="deck-columns" id="deckGrid"></div>
           <p class="empty" id="deckEmpty" hidden>
             Empty deck — add cards from your collection on the right.

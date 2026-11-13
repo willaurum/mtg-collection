@@ -669,6 +669,7 @@ body.busy .progress { opacity: 1; }
 .deck-directory-title { overflow: hidden; max-width: 100%; color: #fff8e8; font: 600 calc(25px * var(--text-scale, 1))/1.05 var(--display); text-shadow: 0 2px 12px rgba(0, 0, 0, .85); text-overflow: ellipsis; white-space: nowrap; }
 .deck-directory-meta { color: rgba(231, 230, 220, .82); font-size: calc(11px * var(--text-scale, 1)); line-height: 1.45; text-shadow: 0 1px 8px rgba(0, 0, 0, .9); }
 .head-actions { display: flex; gap: 8px; flex: 0 0 auto; }
+#wishlistPanel .head-actions, #deckPanel .head-actions { flex-wrap: wrap; justify-content: flex-end; }
 .collection-filter { width: min(310px, 34vw); margin: 0; }
 
 .collection-toolbar {
@@ -694,6 +695,8 @@ body.busy .progress { opacity: 1; }
 .filter-chips { display: flex; flex-wrap: wrap; gap: 5px; }
 .filter-chips button { padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--sunken); color: var(--dim); cursor: pointer; font: 500 calc(10.5px * var(--text-scale, 1)) var(--sans); }
 .filter-chips button:hover, .filter-chips button.active { border-color: var(--bronze); background: var(--gold-soft); color: var(--gold); }
+.color-match-mode { margin-top: 2px; }
+.list-color-panel { width: 100%; max-width: none; }
 
 .profile-actions { display: flex; align-items: center; gap: 2px; margin: 5px -7px -4px; }
 .profile-actions .link-btn { width: auto; padding: 4px 7px; font-size: calc(10.5px * var(--text-scale, 1)); }
@@ -1703,6 +1706,7 @@ kbd {
 /* ----------------------------------------------------------- narrower */
 
 @media (max-width: 1020px) {
+  #wishlistPanel .view-head, #deckPanel .view-head { flex-wrap: wrap; }
   .card-layout { grid-template-columns: minmax(180px, 240px) minmax(0, 1fr); gap: 22px; }
   #collectionPanel .view-head { flex-wrap: wrap; }
   #collectionPanel .collection-toolbar { width: 100%; }
@@ -1737,6 +1741,7 @@ kbd {
 
 @media (max-width: 700px) {
   .view-head { flex-wrap: wrap; }
+  #wishlistPanel .head-actions, #deckPanel .head-actions { justify-content: flex-start; }
   .manager-card { grid-template-columns: 1fr; }
   .manager-card > img { max-width: 245px; }
   .wishlist-group-head { align-items: flex-start; flex-direction: column; }

@@ -31,6 +31,7 @@ function restoreCollectionFilters() {
   }
   const colors = Array.isArray(saved.colors) ? saved.colors : [];
   state.collectionFilters.colors = new Set(colors.filter((color) => ["W", "U", "B", "R", "G", "colorless"].includes(color)));
+  state.collectionFilters.colorMode = saved.colorMode === "and" ? "and" : "or";
   ui.collectionFilter.value = typeof saved.search === "string" ? saved.search : "";
   state.unusedOnly = saved.unused === true;
 }

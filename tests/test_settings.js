@@ -9,7 +9,7 @@ const el = id => {
   return elements.get(id);
 };
 const state = {navigationRevision: 0, deckId: null, recent: [], collectionFilters: {
-  availability: 'all', type: 'all', rarity: 'all', colors: new Set()}, unusedOnly: false};
+  availability: 'all', type: 'all', rarity: 'all', colors: new Set(), colorMode: 'or'}, unusedOnly: false};
 let currentView;
 let resolveLibrary;
 const ui = {collectionFilter: el('filter'), collectionFiltersPanel: {
@@ -40,13 +40,15 @@ vm.runInContext(fs.readFileSync('static/settings.js', 'utf8'), context);
   assert.equal(currentView, 'settings');
   prefs.set('mtg.remember-filters', '1');
   state.collectionFilters.colors = new Set(['W', 'U']);
+  state.collectionFilters.colorMode = 'and';
   state.collectionFilters.type = 'creature';
   ui.collectionFilter.value = 'flying';
   state.unusedOnly = true;
   context.persistCollectionFilters();
-  state.collectionFilters.colors.clear(); ui.collectionFilter.value = '';
+  state.collectionFilters.colors.clear(); state.collectionFilters.colorMode = 'or'; ui.collectionFilter.value = '';
   context.restoreCollectionFilters();
   assert.deepEqual([...state.collectionFilters.colors], ['W', 'U']);
+  assert.equal(state.collectionFilters.colorMode, 'and');
   assert.equal(ui.collectionFilter.value, 'flying');
   assert.equal(state.unusedOnly, true);
   prefs.set('mtg.backup-days', '7');

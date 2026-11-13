@@ -59,6 +59,7 @@ const ui = {
   wishlistPanel: el("wishlistPanel"), wishlistGrid: el("wishlistGrid"),
   wishlistEmpty: el("wishlistEmpty"), wishlistSummary: el("wishlistSummary"),
   wishlistExportBtn: el("wishlistExportBtn"), wishlistSort: el("wishlistSort"),
+  wishlistColorsBtn: el("wishlistColorsBtn"), wishlistColorsPanel: el("wishlistColorsPanel"),
   openFolderBtn: el("openFolderBtn"),
   cardPanel: el("cardPanel"), collectionPanel: el("collectionPanel"),
   collGrid: el("collGrid"), collEmpty: el("collEmpty"), collSummary: el("collSummary"),
@@ -84,7 +85,7 @@ const ui = {
   deckImportProblemsTitle: el("deckImportProblemsTitle"), deckImportProblems: el("deckImportProblems"),
   deckPanel: el("deckPanel"), deckName: el("deckName"), deckSummary: el("deckSummary"),
   deckCategory: el("deckCategory"), deckPrice: el("deckPrice"), deckExportBtn: el("deckExportBtn"),
-  deckSort: el("deckSort"),
+  deckSort: el("deckSort"), deckColorsBtn: el("deckColorsBtn"), deckColorsPanel: el("deckColorsPanel"),
   deckUnownedPrice: el("deckUnownedPrice"),
   deckExportDialog: el("deckExportDialog"), deckExportText: el("deckExportText"),
   goldfishBtn: el("goldfishBtn"), goldfishDialog: el("goldfishDialog"),
@@ -147,8 +148,10 @@ const state = {
   collectionSort: readPreference("mtg.collection-sort", "name"),
   wishlistSort: readPreference("mtg.wishlist-sort", "name"),
   deckSort: readPreference("mtg.deck-sort", "mana"),
+  wishlistColorFilter: { colors: new Set(), mode: "or" },
+  deckColorFilter: { colors: new Set(), mode: "or" },
   unusedOnly: readPreference("mtg.collection-unused", "0") === "1",
-  collectionFilters: { availability: "all", colors: new Set(), type: "all", rarity: "all" },
+  collectionFilters: { availability: "all", colors: new Set(), colorMode: "or", type: "all", rarity: "all" },
   unownedPriceKey: null,
   commandItems: [],
   commandIndex: 0,
@@ -747,6 +750,45 @@ function collectionSearchText(entry) {
     .filter(Boolean).join(" ").toLocaleLowerCase();
 }
 
+function matchesColorFilter(card, selectedColors, mode) {
+  if (!selectedColors.size) return true;
+  const colours = card.color_identity || card.colors || [];
+  const matches = (color) => color === "colorless"
+    ? colours.length === 0 : colours.includes(color);
+  return mode === "and" ? [...selectedColors].every(matches) : [...selectedColors].some(matches);
+}
+
+function renderListColorControls(panel, toggle, filter) {
+  const open = !panel.hidden;
+  toggle.classList.toggle("active", open || filter.colors.size > 0);
+  toggle.textContent = filter.colors.size ? `Colors · ${filter.colors.size}` : "Colors";
+  toggle.setAttribute("aria-expanded", String(open));
+  panel.querySelectorAll("[data-list-color]").forEach((button) => {
+    const active = button.dataset.listColor === "all"
+      ? filter.colors.size === 0 : filter.colors.has(button.dataset.listColor);
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  panel.querySelectorAll("[data-list-color-mode]").forEach((button) => {
+    const active = button.dataset.listColorMode === filter.mode;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+}
+
+function setListColorFilter(view, kind, value) {
+  const filter = view === "wishlist" ? state.wishlistColorFilter : state.deckColorFilter;
+  if (kind === "color") {
+    if (value === "all") filter.colors.clear();
+    else if (filter.colors.has(value)) filter.colors.delete(value);
+    else filter.colors.add(value);
+  } else if (kind === "mode" && (value === "and" || value === "or")) {
+    filter.mode = value;
+  } else return;
+  if (view === "wishlist") renderWishlist();
+  else renderDeckPanel();
+}
+
 function renderCollection() {
   persistCollectionFilters();
   hideCardPreview();
@@ -757,16 +799,13 @@ function renderCollection() {
     .filter((entry) => {
       const text = entry.searchText ?? collectionSearchText(entry);
       const card = entry.card || {};
-      const colours = card.color_identity || card.colors || [];
       const availability = filters.availability === "all" ||
         (filters.availability === "free" && (entry.available || 0) > 0) ||
         (filters.availability === "allocated" && (entry.allocated || 0) > 0);
       const type = filters.type === "all" ||
         (card.type_line || "").toLocaleLowerCase().includes(filters.type);
       const rarity = filters.rarity === "all" || card.rarity === filters.rarity;
-      const selectedColors = filters.colors;
-      const colour = [...selectedColors].every((color) =>
-        color === "colorless" ? colours.length === 0 : colours.includes(color));
+      const colour = matchesColorFilter(card, filters.colors, filters.colorMode);
       return terms.every((term) => text.includes(term)) && availability && type && rarity && colour &&
         (!state.unusedOnly || (entry.allocated || 0) === 0);
     })
@@ -785,6 +824,11 @@ function renderCollection() {
     button.classList.toggle("active", collectionFilter === "color"
       ? (value === "all" ? filters.colors.size === 0 : filters.colors.has(value))
       : filters[collectionFilter] === value);
+  });
+  ui.collectionFiltersPanel.querySelectorAll("[data-color-mode]").forEach((button) => {
+    const active = button.dataset.colorMode === filters.colorMode;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
   });
   ui.collEmpty.hidden = entries.length > 0;
   if (!entries.length) {
@@ -816,13 +860,19 @@ function collectionTileHtml(entry) {
 function renderWishlist() {
   hideCardPreview();
   const items = state.library.wishlist || [];
+  const visibleItems = items.filter((item) =>
+    matchesColorFilter(item.card || {}, state.wishlistColorFilter.colors, state.wishlistColorFilter.mode));
+  renderListColorControls(ui.wishlistColorsPanel, ui.wishlistColorsBtn, state.wishlistColorFilter);
   ui.wishlistCount.textContent = items.length;
   ui.wishlistExportBtn.disabled = items.length === 0;
   const total = items.reduce((sum, item) => sum + item.quantity, 0);
   const deckCount = new Set(items.flatMap((item) => item.proxy_decks.map((deck) => deck.deck_id))).size;
   ui.wishlistSummary.textContent = `${total} card${total === 1 ? "" : "s"} across ${items.length} printing${items.length === 1 ? "" : "s"} · ${deckCount} deck${deckCount === 1 ? "" : "s"}.`;
-  ui.wishlistEmpty.hidden = items.length > 0;
-  const groups = wishlistGroups(items);
+  ui.wishlistEmpty.hidden = visibleItems.length > 0;
+  ui.wishlistEmpty.textContent = items.length
+    ? "No wishlist cards match the selected colours."
+    : "No cards needed yet. Add one from the card viewer or add a proxy to a deck.";
+  const groups = wishlistGroups(visibleItems);
   const comparator = wishlistComparator(state.wishlistSort);
   ui.wishlistGrid.innerHTML = groups.map((group) => {
     const quantity = group.items.reduce((sum, item) => sum + item.quantity, 0);
@@ -1131,6 +1181,12 @@ function setCollectionFilter(kind, value) {
   }
   if (!(kind in state.collectionFilters)) return;
   state.collectionFilters[kind] = value;
+  renderCollection();
+}
+
+function setCollectionColorMode(mode) {
+  if (mode !== "and" && mode !== "or") return;
+  state.collectionFilters.colorMode = mode;
   renderCollection();
 }
 
@@ -1874,12 +1930,15 @@ function renderDeckPanel() {
   state.problems = deckProblems(deck);
   renderDeckSummary(deck);
   renderDeckStats(deck);
+  renderListColorControls(ui.deckColorsPanel, ui.deckColorsBtn, state.deckColorFilter);
   const proxyCount = deck.cards.filter((line) => line.proxy).length;
   ui.proxyListBtn.hidden = proxyCount === 0;
   ui.proxyListBtn.textContent = `Proxies${proxyCount ? ` · ${proxyCount}` : ""}`;
 
   const groups = new Map(CATEGORIES.map((c) => [c.key, []]));
-  deck.cards.forEach((line) => {
+  const visibleLines = deck.cards.filter((line) =>
+    matchesColorFilter(lineCard(line), state.deckColorFilter.colors, state.deckColorFilter.mode));
+  visibleLines.forEach((line) => {
     const entry = state.entryById.get(line.card_id);
     const card = lineCard(line);
     const key = line.card_id === deck.companion_id ? "companion"
@@ -1887,7 +1946,10 @@ function renderDeckPanel() {
       : line.zone === "maybeboard" ? "maybeboard" : cardCategory(card);
     groups.get(key).push({ line, entry, card });
   });
-  ui.deckEmpty.hidden = deck.cards.length > 0;
+  ui.deckEmpty.hidden = visibleLines.length > 0;
+  ui.deckEmpty.textContent = deck.cards.length
+    ? "No deck cards match the selected colours."
+    : "Empty deck — add cards from your collection on the right.";
   ui.deckGrid.innerHTML = CATEGORIES
     .filter((category) => groups.get(category.key).length)
     .map((category) => {
@@ -2770,6 +2832,21 @@ ui.managerCancelBtn.addEventListener("click", () => {
 ui.wishlistBtn.addEventListener("click", showWishlistView);
 ui.wishlistExportBtn.addEventListener("click", exportWishlist);
 ui.wishlistSort.addEventListener("change", setWishlistSort);
+for (const view of ["wishlist", "deck"]) {
+  const panel = view === "wishlist" ? ui.wishlistColorsPanel : ui.deckColorsPanel;
+  const toggle = view === "wishlist" ? ui.wishlistColorsBtn : ui.deckColorsBtn;
+  toggle.addEventListener("click", () => {
+    panel.hidden = !panel.hidden;
+    if (view === "wishlist") renderWishlist();
+    else renderDeckPanel();
+  });
+  panel.querySelectorAll("[data-list-color]").forEach((button) => {
+    button.addEventListener("click", () => setListColorFilter(view, "color", button.dataset.listColor));
+  });
+  panel.querySelectorAll("[data-list-color-mode]").forEach((button) => {
+    button.addEventListener("click", () => setListColorFilter(view, "mode", button.dataset.listColorMode));
+  });
+}
 ui.openFolderBtn.addEventListener("click", openFolder);
 ui.collectionFilter.addEventListener("input", renderCollection);
 ui.collectionSort.addEventListener("change", setCollectionSort);
@@ -2780,6 +2857,9 @@ ui.collectionFiltersBtn.addEventListener("click", toggleCollectionFilters);
 ui.collectionFiltersPanel.querySelectorAll("[data-collection-filter]").forEach((button) => {
   button.addEventListener("click", () =>
     setCollectionFilter(button.dataset.collectionFilter, button.dataset.value));
+});
+ui.collectionFiltersPanel.querySelectorAll("[data-color-mode]").forEach((button) => {
+  button.addEventListener("click", () => setCollectionColorMode(button.dataset.colorMode));
 });
 ui.exportProfileBtn.addEventListener("click", exportProfile);
 ui.importProfileBtn.addEventListener("click", () => ui.profileImportFile.click());
