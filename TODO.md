@@ -10,8 +10,8 @@ better sorting in wishlist and deck builder
 Partner Commanders / companion slot
 Performance changes
 the X on the card pop up moves with scroll
+filters for colors should be and/or not exclusive and
 
 ### SBs
 
-- filters for colors should be and/or not exclusive and
 - filter by set 
